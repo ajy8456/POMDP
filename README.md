@@ -1,1 +1,1 @@
-# POMCPOW
+# POMDP
