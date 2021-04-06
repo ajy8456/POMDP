@@ -153,9 +153,9 @@ class TransitionModel(TransitionModel):
     def func_noise(self, var_sysd=1e-9):
         """Returns a function that returns a state-dependent Gaussian noise."""
         def fn(mt):
-            gaussian_noise = pomdp_py.Gaussian([0,0],
-                                               [[var_sysd, 0],
-                                                [0, var_sysd]])
+            gaussian_noise = Gaussian([0,0],
+                                      [[var_sysd, 0],
+                                      [0, var_sysd]])
             return gaussian_noise
         return fn
 
@@ -224,8 +224,8 @@ class ObservationModel(ObservationModel):
         def fn(mt):
             variance = self._compute_variance(mt)
             gaussian_noise = Gaussian([0,0],
-                                               [[variance, 0],
-                                                [0, variance]])
+                                      [[variance, 0],
+                                       [0, variance]])
             return gaussian_noise
         return fn
 
@@ -439,7 +439,7 @@ def main():
     const = 1
 
     # planning horizon
-    planning_horizon = 30
+    planning_horizon = 3
     
     # POMDP modeling
     policy_model = PolicyModel() # dummy?
@@ -457,42 +457,44 @@ def main():
     light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, agent, env)
 
     # planning
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=-1,
+    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=2,
                       discount_factor=0.9, exploration_const=math.sqrt(2),
-                      num_visits_init=0, value_init=0,
-                      rollout_policy=RandomRollout())
+                      num_visits_init=0, value_init=0)
     for i in range(planning_horizon):
-        action = planner.plan(light_dark_problem.agent)
+        best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
         print("==== Step %d ====" % (i+1))
-        print("True state: %s" % light_dark_problem.env.state)
+        # print("True state: %s" % light_dark_problem.env.state)
         print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
-        print("Action: %s" % str(action))
-        print("Reward: %s" % str(light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, action, None)))
-        print("Observation: %s" % planner.observation)
-
-        print("Num sims: %d" % planner.last_num_sims)
-        print("Plan time: %.5f" % planner.last_planning_time)
+        print("Action: %s" % str(best_action))
+        # print("Reward: %s" % str(light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, None)))
+        # print("Observation: %s" % str(light_dark_problem.env.observation))
+        print("Num sims: %d" % sims_count)
+        print("Plan time: %.5f" % time_taken)
+        
+        # |FIXME|
+        # light_dark_problem.update_history()
+        # planner.update()
     
-    # Visualization
-    x_range = (-1, 7)
-    y_range = (-2, 4)
-    viz = LightDarkViz(env, x_range, y_range, 0.1)
-    viz.set_goal(goal_pos)
-    viz.set_initial_belief_pos(b_0[0])
-    viz.log_position(tuple(b_0[0]), path=0)
-    viz.log_position(tuple(b_0[0]), path=1)
+    # # Visualization
+    # x_range = (-1, 7)
+    # y_range = (-2, 4)
+    # viz = LightDarkViz(env, x_range, y_range, 0.1)
+    # viz.set_goal(goal_pos)
+    # viz.set_initial_belief_pos(b_0[0])
+    # viz.log_position(tuple(b_0[0]), path=0)
+    # viz.log_position(tuple(b_0[0]), path=1)
 
-    sysd_b_plan = [b_0]
-    for m_i, _, _ in plan:
-        viz.log_position(tuple(m_i), path=0)
+    # sysd_b_plan = [b_0]
+    # for m_i, _, _ in plan:
+    #     viz.log_position(tuple(m_i), path=0)
 
-    viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
-                          1: [(0,0,0), (255,0,0)]},
-             path_styles={0: "--",
-                          1: "-"},
-             path_widths={0: 4,
-                          1: 1})
-    plt.show()    
+    # viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
+    #                       1: [(0,0,0), (255,0,0)]},
+    #          path_styles={0: "--",
+    #                       1: "-"},
+    #          path_widths={0: 4,
+    #                       1: 1})
+    # plt.show()    
 
 
 if __name__ == '__main__':

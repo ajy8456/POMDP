@@ -1043,7 +1043,7 @@ class Gaussian(GenerativeDistribution):
         # The mean is the MPE
         return self._mean
 
-    def random(self, n=1):
+    def random(self, n=1): # ?
         """random(self, n=1)"""
         d = len(self._mean)
         Xstd = np.random.randn(n, d)

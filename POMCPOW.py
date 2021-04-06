@@ -14,7 +14,6 @@ class POMCPOW(Planner):
                  max_depth=5, planning_time=-1., num_sims=-1,
                  discount_factor=0.9, exploration_const=math.sqrt(2),
                  num_visits_init=0, value_init=0,
-                 rollout_policy=RandomRollout(),
                  action_prior=None):
         """
         Args:
@@ -36,7 +35,6 @@ class POMCPOW(Planner):
             self._planning_time = 1.
         self._num_visits_init = num_visits_init
         self._value_init = value_init
-        self._rollout_policy = rollout_policy
         self._discount_factor = discount_factor
         self._exploration_const = exploration_const
         self._action_prior = action_prior
@@ -44,6 +42,8 @@ class POMCPOW(Planner):
         self._agent = None
         self._last_num_sims = -1
         self._last_planning_time = -1
+        # |TODO|
+        # self.history
 
     @property
     def update_agent_belief(self):
@@ -84,12 +84,14 @@ class POMCPOW(Planner):
             if self._num_sims > 0 and sims_count >= self._num_sims:
                 break
         
+        # |FIXME| def _update():
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
         self._agent.tree.value = self._agent.tree[best_action].value
         return best_action, time_taken, sims_count
-        
+
+    # |NOTE| uniformly random    
     def _NextAction(self):
         _action_x = random.uniform(-1,1)
         _action_y = random.uniform(-1,1)
@@ -127,24 +129,28 @@ class POMCPOW(Planner):
         _history_action = root[action]
         if len(_history_action.children) <= k_o*_history_action.num_visits**alpha_o:
             if root[action][observation] is None:
-                history_action_observation_node = self._VNode(agent=self._agent, root=False)
-                root[action][observation] = history_action_observation_node
+                # |TODO| M(hao) <- M(hao)+1 필요 없음?
+                # |NOTE| history_action_observation_node : temporal
+                _history_action_observation_node = self._VNode(agent=self._agent, root=False)
         else:
             observation = random.choice(root[action].children)
+            _history_action_observation_node = root[action][observation]
 
-        # append s` to B(hao)
-        root[action][observation].belief.add(next_state)
-        # append Z(o|s,a,s`) to W(hao)
+        history += ((action, observation), )
+        # |NOTE| append s` to B(hao)
+        # |FIXME| B(hao)에 s`을 추가해야 하는데 B(h)를 복사한 후에 s`을 추가하고 있음
+        _history_action_observation_node.belief.add(next_state)
+        # |NOTE| append Z(o|s,a,s`) to W(hao)
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, action)
-        root[action][observation].belief[next_state] = prob
+        _history_action_observation_node.belief[next_state] = prob
 
         if observation not in root[action].children:
-            root[action].children += observation
-            total_reward = reward + self._rollout(state, history, root, depth)
+            root[action][observation] = _history_action_observation_node
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1)
         else:
-            # s` <- select B(hao)[i] w.p W(hao)[i]/sigma(j=1~m) W(hao)[j]
+            # |NOTE| s` <- select B(hao)[i] w.p W(hao)[i]/sigma(j=1~m) W(hao)[j]
             next_state = root[action][observation].belief.random()
-            # r <- R(s,a,s`)
+            # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
                                                                             history + ((action, observation),),
@@ -153,6 +159,7 @@ class POMCPOW(Planner):
                                                                             observation,
                                                                             depth+nsteps)
         
+        # |FIXME| agent.tree->Q->V check
         root.num_visits += 1
         root[action].num_visits += 1
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
@@ -163,7 +170,7 @@ class POMCPOW(Planner):
         total_discounted_reward = 0.0
 
         while depth < self._max_depth:
-            action = self._rollout_policy.rollout(state, history)
+            action = self._NextAction()
             next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
             history = history + ((action, observation),)
             depth += nsteps
