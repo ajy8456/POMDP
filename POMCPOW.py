@@ -84,7 +84,6 @@ class POMCPOW(Planner):
             if self._num_sims > 0 and sims_count >= self._num_sims:
                 break
         
-        # |FIXME| def _update():
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
@@ -225,3 +224,36 @@ class POMCPOW(Planner):
                 return VNodeParticles(self._num_visits_init,
                                       self._value_init,
                                       belief=copy.deepcopy(agent.belief))
+
+    def update(self, agent, env, real_action, next_state, real_observation, state_transform_func=None):
+        """
+        Assume that the agent's history has been updated after taking real_action and receiving real_observation.
+
+        `state_transform_func`: Used to add artificial transform to states during
+            particle reinvigoration. Signature: s -> s_transformed
+        """
+        if not isinstance(agent.belief, Particles):
+            raise TypeError("agent's belief is not represented in particles.\n"\
+                            "POMCP not usable. Please convert it to particles.")
+        if not hasattr(agent, "tree"):
+            print("Warning: agent does not have tree. Have you planned yet?")
+            return
+        
+        # |FIXME|
+        if agent.tree[real_action][real_observation] is None:
+            # Never anticipated the real_observation. No reinvigoration can happen.
+            raise ValueError("Particle deprivation.")
+
+        # Update the state
+        env.apply_transition(next_state)
+
+        # Update the tree; Reinvigorate the tree's belief and use it as the updated belief for the agent.
+        agent.tree = RootVNodeParticles.from_vnode(agent.tree[real_action][real_observation], agent.history)
+        tree_belief = agent.tree.belief
+        agent.set_belief(particle_reinvigoration(tree_belief,
+                                                 len(agent.init_belief),
+                                                 state_transform_func=state_transform_func))
+        # If observation was never encountered in simulation, then tree will be None;
+        # particle reinvigoration will occur.
+        if agent.tree is not None:
+            agent.tree.belief = copy.deepcopy(agent.belief)

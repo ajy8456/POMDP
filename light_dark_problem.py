@@ -293,8 +293,17 @@ class LightDarkEnvironment(Environment):
 
 
 class LightDarkProblem(POMDP):
-    def __init__(self, init_state, init_belief, goal_state, agent,env):
-        self.goal_state = goal_state
+    def __init__(self, init_state, init_belief, goal_state, light, const):
+        agent = Agent(init_belief,
+                      PolicyModel(),
+                      TransitionModel(),
+                      ObservationModel(light,const),
+                      RewardModel(goal_state))  
+        env = LightDarkEnvironment(init_state,             # init state
+                                   light,           # light
+                                   const,           # const
+                                   RewardModel(goal_state))    # reward model
+        
         super().__init__(agent, env, name="LightDarkProblem")
 
 
@@ -433,47 +442,72 @@ def main():
     init_state = State(tuple(np.array([2.5, 2.5])))
     goal_state = State(tuple(np.array([0.0, 0.0])))
     init_belief = Histogram({State(tuple(np.array([2.5, 2.5]))):1.0}) # assume s_0=b_0
-
+    
     # defines the observation noise equation.
-    light = 5
-    const = 1
+    light = 2
+    const = 0
 
     # planning horizon
-    planning_horizon = 3
+    planning_horizon = 30
+
+    # defines discount_factor
+    discont_factor = 0.9
     
-    # POMDP modeling
-    policy_model = PolicyModel() # dummy?
-    transition_model = TransitionModel()
-    observation_model = ObservationModel(light, const)
-    reward_model = RewardModel(goal_state)
+    # creates POMDP model
+    light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
+    light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1000))
 
-    agent = Agent(init_belief, policy_model, transition_model, observation_model, reward_model)
-    agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
-    env = LightDarkEnvironment(init_state,             # init state
-                               light,           # light
-                               const,           # const
-                               reward_model)    # reward model
-
-    light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, agent, env)
-
-    # planning
+    # set planner
     planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=2,
-                      discount_factor=0.9, exploration_const=math.sqrt(2),
+                      discount_factor=discont_factor, exploration_const=math.sqrt(2),
                       num_visits_init=0, value_init=0)
+    
+    # planning
+    print("==== Planning ====")
+    print("Inital state: %s" % light_dark_problem.env.state)
+    print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
+    total_reward = 0
     for i in range(planning_horizon):
         best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
-        print("==== Step %d ====" % (i+1))
-        # print("True state: %s" % light_dark_problem.env.state)
-        print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
-        print("Action: %s" % str(best_action))
-        # print("Reward: %s" % str(light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, None)))
-        # print("Observation: %s" % str(light_dark_problem.env.observation))
-        print("Num sims: %d" % sims_count)
-        print("Plan time: %.5f" % time_taken)
         
         # |FIXME|
-        # light_dark_problem.update_history()
-        # planner.update()
+        next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
+        # planner.update() -> ??real observation에 따라서 node가 새로 생길 수도 있는데 그럼 tree 무용지물??이게 replanning인가??이미 탐색했던 observation에서 sample 해야하나??
+        # real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
+        # 이전까지 탐색했던 observation 중에서 랜덤하게 선택
+        real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
+        reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
+        total_reward = reward + discont_factor*total_reward
+        planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+        print("==== Step %d ====" % (i+1))
+        print("Action: %s" % str(best_action))
+        print("True state: %s" % light_dark_problem.env.state)
+        print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
+        print("Observation: %s" % real_observation)
+        print("Reward: %s" % str(reward))
+        print("Num sims: %d" % sims_count)
+        print("Plan time: %.5f" % time_taken)
+            
+
+        
+        if isinstance(light_dark_problem.agent.cur_belief, Histogram):
+            new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
+                                                 action, real_observation,
+                                                 light_dark_problem.agent.observation_model,
+                                                 light_dark_problem.agent.transition_model)
+            light_dark_problem.agent.set_belief(new_belief)
+        if reward == 100:
+            print("\n")
+            print("==== Success ====")
+            print("Total reward: %.5f" % total_reward)
+            print("Num sims: %d" % planner.last_num_sims)
+            print("Plan time: %.5f" % planner.last_planning_time)
+            break
+    print("==== Fail ====")
+    print("Total reward: %.5f" % total_reward)
+    print("Num sims: %d" % planner.last_num_sims)
+    print("Plan time: %.5f" % planner.last_planning_time)
+            
     
     # # Visualization
     # x_range = (-1, 7)
