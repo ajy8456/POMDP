@@ -231,7 +231,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, goal_state, epsilon=0.001):
+    def __init__(self, goal_state, epsilon=0.1):
         self._goal_state = goal_state
         self._epsilon=epsilon
 
@@ -298,7 +298,7 @@ class LightDarkProblem(POMDP):
                       PolicyModel(),
                       TransitionModel(),
                       ObservationModel(light,const),
-                      RewardModel(goal_state))  
+                      RewardModel(goal_state, epsilon=0.1))  
         env = LightDarkEnvironment(init_state,             # init state
                                    light,           # light
                                    const,           # const
@@ -448,7 +448,7 @@ def main():
     const = 0
 
     # planning horizon
-    planning_horizon = 30
+    planning_horizon = 10
 
     # defines discount_factor
     discont_factor = 0.9
@@ -458,7 +458,7 @@ def main():
     light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1000))
 
     # set planner
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=2,
+    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=30,
                       discount_factor=discont_factor, exploration_const=math.sqrt(2),
                       num_visits_init=0, value_init=0)
     
@@ -474,7 +474,7 @@ def main():
         next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
         # planner.update() -> ??real observation에 따라서 node가 새로 생길 수도 있는데 그럼 tree 무용지물??이게 replanning인가??이미 탐색했던 observation에서 sample 해야하나??
         # real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
-        # 이전까지 탐색했던 observation 중에서 랜덤하게 선택
+        # 이전까지 탐색했던 observation 중에서 랜덤하게 선택??
         real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
         reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
         total_reward = reward + discont_factor*total_reward
@@ -488,14 +488,13 @@ def main():
         print("Num sims: %d" % sims_count)
         print("Plan time: %.5f" % time_taken)
             
-
-        
         if isinstance(light_dark_problem.agent.cur_belief, Histogram):
             new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
-                                                 action, real_observation,
+                                                 best_action, real_observation,
                                                  light_dark_problem.agent.observation_model,
                                                  light_dark_problem.agent.transition_model)
             light_dark_problem.agent.set_belief(new_belief)
+
         if reward == 100:
             print("\n")
             print("==== Success ====")
@@ -505,8 +504,9 @@ def main():
             break
     print("==== Fail ====")
     print("Total reward: %.5f" % total_reward)
-    print("Num sims: %d" % planner.last_num_sims)
-    print("Plan time: %.5f" % planner.last_planning_time)
+    # |FIXME| print total #sim & planning time
+    # print("Num sims: %d" % planner.last_num_sims)
+    # print("Plan time: %.5f" % planner.last_planning_time)
             
     
     # # Visualization
