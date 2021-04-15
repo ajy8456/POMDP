@@ -237,9 +237,11 @@ class RewardModel(RewardModel):
 
     def _reward_func(self, state, action, next_state, goal_state, epsilon):
         if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon:
-            return 100
+            reward = 100
+            return reward
         else:
-            return -1
+            reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
+            return reward
 
     def sample(self, state, action, next_state):
         # deterministic
@@ -444,7 +446,7 @@ def main():
     init_belief = Histogram({State(tuple(np.array([2.5, 2.5]))):1.0}) # assume s_0=b_0
     
     # defines the observation noise equation.
-    light = 2
+    light = 5
     const = 0
 
     # planning horizon
@@ -502,8 +504,9 @@ def main():
             print("Num sims: %d" % planner.last_num_sims)
             print("Plan time: %.5f" % planner.last_planning_time)
             break
-    print("==== Fail ====")
-    print("Total reward: %.5f" % total_reward)
+        else:
+            print("==== Fail ====")
+            print("Total reward: %.5f" % total_reward)
     # |FIXME| print total #sim & planning time
     # print("Num sims: %d" % planner.last_num_sims)
     # print("Plan time: %.5f" % planner.last_planning_time)
