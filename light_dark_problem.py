@@ -231,7 +231,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, goal_state, epsilon=0.1):
+    def __init__(self, goal_state, epsilon=0.01):
         self._goal_state = goal_state
         self._epsilon=epsilon
 
@@ -300,7 +300,7 @@ class LightDarkProblem(POMDP):
                       PolicyModel(),
                       TransitionModel(),
                       ObservationModel(light,const),
-                      RewardModel(goal_state, epsilon=0.1))  
+                      RewardModel(goal_state, epsilon=0.01))  
         env = LightDarkEnvironment(init_state,                  # init state
                                    light,                       # light
                                    const,                       # const
@@ -443,21 +443,21 @@ class LightDarkViz:
 def main():
     init_state = State(tuple(np.array([2.5, 2.5])))
     goal_state = State(tuple(np.array([0.0, 0.0])))
-    init_belief = Histogram({State(tuple(np.array([2.5, 2.5]))):1.0}) # assume s_0=b_0
+    init_belief = Histogram({State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()]))):1.0})
     
     # defines the observation noise equation.
     light = 5
     const = 0
 
     # planning horizon
-    planning_horizon = 10
+    planning_horizon = 100
 
     # defines discount_factor
     discont_factor = 0.9
     
     # creates POMDP model
     light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
-    light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1000))
+    light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
 
     # set planner
     planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=-1,
@@ -496,12 +496,13 @@ def main():
         print("Num sims: %d" % sims_count)
         print("Plan time: %.5f" % time_taken)
             
-        if isinstance(light_dark_problem.agent.cur_belief, Histogram):
-            new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
-                                                 best_action, real_observation,
-                                                 light_dark_problem.agent.observation_model,
-                                                 light_dark_problem.agent.transition_model)
-            light_dark_problem.agent.set_belief(new_belief)
+        # |NOTE| for B(s)
+        # if isinstance(light_dark_problem.agent.cur_belief, Histogram):
+        #     new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
+        #                                          best_action, real_observation,
+        #                                          light_dark_problem.agent.observation_model,
+        #                                          light_dark_problem.agent.transition_model)
+        #     light_dark_problem.agent.set_belief(new_belief)
 
         if reward == 100:
             print("\n")
