@@ -158,7 +158,7 @@ class POMCPOW(Planner):
                                                                             observation,
                                                                             depth+nsteps)
         
-        # |FIXME| agent.tree->Q->V check
+        # |TODO| agent.tree->Q->V check
         root.num_visits += 1
         root[action].num_visits += 1
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
@@ -223,7 +223,8 @@ class POMCPOW(Planner):
             else:
                 return VNodeParticles(self._num_visits_init,
                                       self._value_init,
-                                      belief=copy.deepcopy(agent.belief))
+                                    #   belief=copy.deepcopy(agent.belief))
+                                      belief=Particles([]))
 
     def update(self, agent, env, real_action, next_state, real_observation, state_transform_func=None):
         """

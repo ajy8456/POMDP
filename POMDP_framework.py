@@ -677,7 +677,10 @@ class Particles(GenerativeDistribution):
         particles = [s for s in self._particles if s != value]
         # particles = [s for s in self._particles if s.position.all() != value.position.all()]
         len_not_value = len(particles)
-        amount_to_add = int(prob * len_not_value / (1 - prob))
+        if len_not_value == 0:
+            amount_to_add = 1
+        else:
+            amount_to_add = int(prob * len_not_value / (1 - prob))
         for i in range(amount_to_add): # Append particles as many as the number of prob
             particles.append(value)
         self._particles = particles
@@ -794,7 +797,7 @@ def particle_reinvigoration(particles, num_particles, state_transform_func=None)
     if len(new_particles) > num_particles:
         return new_particles
     
-    print("Particle reinvigoration for %d particles" % (num_particles - len(new_particles)))    
+    # print("Particle reinvigoration for %d particles" % (num_particles - len(new_particles)))    
     while len(new_particles) < num_particles:
         # need to make a copy otherwise the transform affects states in 'particles'
         next_state = copy.deepcopy(particles.random())
