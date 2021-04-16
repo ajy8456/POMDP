@@ -42,8 +42,8 @@ class POMCPOW(Planner):
         self._agent = None
         self._last_num_sims = -1
         self._last_planning_time = -1
-        # |TODO|
-        # self.history
+
+        self.history = tuple(pomdp.agent._init_belief)
 
     @property
     def update_agent_belief(self):
@@ -132,10 +132,6 @@ class POMCPOW(Planner):
                 # |NOTE| history_action_observation_node : temporal
                 _history_action_observation_node = self._VNode(agent=self._agent, root=False)
         else:
-            
-            print("observation full!!")
-            print("C(ha):", root[action].children)
-
             observation = random.choice(list(root[action].children.keys()))
             _history_action_observation_node = root[action][observation]
 
@@ -247,6 +243,9 @@ class POMCPOW(Planner):
         if agent.tree[real_action][real_observation] is None:
             # Never anticipated the real_observation. No reinvigoration can happen.
             raise ValueError("Particle deprivation.")
+
+        # Update history
+        self.history += ((real_action, real_observation),)
 
         # Update the state
         env.apply_transition(next_state)

@@ -301,10 +301,10 @@ class LightDarkProblem(POMDP):
                       TransitionModel(),
                       ObservationModel(light,const),
                       RewardModel(goal_state, epsilon=0.1))  
-        env = LightDarkEnvironment(init_state,             # init state
-                                   light,           # light
-                                   const,           # const
-                                   RewardModel(goal_state))    # reward model
+        env = LightDarkEnvironment(init_state,                  # init state
+                                   light,                       # light
+                                   const,                       # const
+                                   RewardModel(goal_state))     # reward model
         
         super().__init__(agent, env, name="LightDarkProblem")
 
@@ -460,7 +460,7 @@ def main():
     light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1000))
 
     # set planner
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
+    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=-1,
                       discount_factor=discont_factor, exploration_const=math.sqrt(2),
                       num_visits_init=0, value_init=0)
     
@@ -469,6 +469,8 @@ def main():
     print("Inital state: %s" % light_dark_problem.env.state)
     print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
     total_reward = 0
+    total_num_sims = 0
+    total_plan_time = 0.0
     for i in range(planning_horizon):
         best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
         
@@ -480,7 +482,11 @@ def main():
         real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
         reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
         total_reward = reward + discont_factor*total_reward
+        total_num_sims += sims_count
+        total_plan_time += time_taken
+
         planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+        
         print("==== Step %d ====" % (i+1))
         print("Action: %s" % str(best_action))
         print("True state: %s" % light_dark_problem.env.state)
@@ -501,15 +507,16 @@ def main():
             print("\n")
             print("==== Success ====")
             print("Total reward: %.5f" % total_reward)
-            print("Num sims: %d" % planner.last_num_sims)
-            print("Plan time: %.5f" % planner.last_planning_time)
+            print("History:", planner.history)
+            print("Total Num sims: %d" % total_num_sims)
+            print("Total Plan time: %.5f" % total_plan_time)
             break
-        else:
+        elif i == planning_horizon-1:
             print("==== Fail ====")
             print("Total reward: %.5f" % total_reward)
-    # |FIXME| print total #sim & planning time
-    # print("Num sims: %d" % planner.last_num_sims)
-    # print("Plan time: %.5f" % planner.last_planning_time)
+            print("History:", planner.history)
+            print("Total Num sims: %d" % total_num_sims)
+            print("Total Plan time: %.5f" % total_plan_time)
             
     
     # # Visualization
