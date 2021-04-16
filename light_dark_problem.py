@@ -460,7 +460,7 @@ def main():
     light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1000))
 
     # set planner
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=30,
+    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
                       discount_factor=discont_factor, exploration_const=math.sqrt(2),
                       num_visits_init=0, value_init=0)
     

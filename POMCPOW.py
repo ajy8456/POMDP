@@ -104,7 +104,7 @@ class POMCPOW(Planner):
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
-                return self._ucb(vnode)
+        return self._ucb(vnode)
 
     def _simulate(self, state, history, root, parent, observation, depth, k_o=5, alpha_o=1/15): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
@@ -132,7 +132,11 @@ class POMCPOW(Planner):
                 # |NOTE| history_action_observation_node : temporal
                 _history_action_observation_node = self._VNode(agent=self._agent, root=False)
         else:
-            observation = random.choice(root[action].children)
+            
+            print("observation full!!")
+            print("C(ha):", root[action].children)
+
+            observation = random.choice(list(root[action].children.keys()))
             _history_action_observation_node = root[action][observation]
 
         history += ((action, observation), )
@@ -152,7 +156,7 @@ class POMCPOW(Planner):
             # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
-                                                                            history + ((action, observation),),
+                                                                            history,
                                                                             root[action][observation],
                                                                             root[action],
                                                                             observation,
