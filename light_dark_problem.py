@@ -231,7 +231,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, goal_state, epsilon=0.01):
+    def __init__(self, goal_state, epsilon=0.1):
         self._goal_state = goal_state
         self._epsilon=epsilon
 
@@ -300,7 +300,7 @@ class LightDarkProblem(POMDP):
                       PolicyModel(),
                       TransitionModel(),
                       ObservationModel(light,const),
-                      RewardModel(goal_state, epsilon=0.01))  
+                      RewardModel(goal_state, epsilon=0.1))  
         env = LightDarkEnvironment(init_state,                  # init state
                                    light,                       # light
                                    const,                       # const
@@ -450,7 +450,7 @@ def main():
     const = 0
 
     # planning horizon
-    planning_horizon = 100
+    planning_horizon = 30
 
     # defines discount_factor
     discont_factor = 0.9
@@ -460,65 +460,91 @@ def main():
     light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
 
     # set planner
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=-1,
+    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
                       discount_factor=discont_factor, exploration_const=math.sqrt(2),
                       num_visits_init=0, value_init=0)
+
+    data_sucess_history = []
+    data_sucess_value = []
+    data_fail_history = []
+    data_fail_value = []
+    num_sucess = 0
+    num_fail = 0
+    num_planning = 5000
+    for n in range(num_planning):    
+        # planning
+        print("==== Planning ====")
+        print("Inital state: %s" % light_dark_problem.env.state)
+        print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
+        total_reward = 0
+        total_num_sims = 0
+        total_plan_time = 0.0
+        for i in range(planning_horizon):
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
+            
+            # |FIXME|
+            next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
+            # planner.update() -> ??real observation에 따라서 node가 새로 생길 수도 있는데 그럼 tree 무용지물??이게 replanning인가??이미 탐색했던 observation에서 sample 해야하나??
+            # real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
+            # 이전까지 탐색했던 observation 중에서 랜덤하게 선택??
+            real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
+            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
+            total_reward = reward + discont_factor*total_reward
+            total_num_sims += sims_count
+            total_plan_time += time_taken
+
+            planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+            
+            print("==== Step %d ====" % (i+1))
+            print("Action: %s" % str(best_action))
+            print("True state: %s" % light_dark_problem.env.state)
+            print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
+            print("Observation: %s" % real_observation)
+            print("Reward: %s" % str(reward))
+            print("Num sims: %d" % sims_count)
+            print("Plan time: %.5f" % time_taken)
+                
+            # |NOTE| for B(s)
+            # if isinstance(light_dark_problem.agent.cur_belief, Histogram):
+            #     new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
+            #                                          best_action, real_observation,
+            #                                          light_dark_problem.agent.observation_model,
+            #                                          light_dark_problem.agent.transition_model)
+            #     light_dark_problem.agent.set_belief(new_belief)
+
+            if reward == 100:
+                print("\n")
+                print("==== Success ====")
+                print("Total reward: %.5f" % total_reward)
+                print("History:", planner.history)
+                print("Total Num sims: %d" % total_num_sims)
+                print("Total Plan time: %.5f" % total_plan_time)
+                num_sucess += 1
+                data_sucess_history.append(planner.history[:-1])
+                data_sucess_value.append(total_reward)
+                break
+
+            elif i == planning_horizon-1:
+                print("==== Fail ====")
+                print("Total reward: %.5f" % total_reward)
+                print("History:", planner.history)
+                print("Total Num sims: %d" % total_num_sims)
+                print("Total Plan time: %.5f" % total_plan_time)
+                num_fail += 1
+                data_fail_history.append(planner.history[:-1])
+                data_fail_value.append(total_reward)
+
+    # save data
+    import pickle
+    with open('POMDP/dataset/data_sucess_history.pickle', 'wb') as f:
+        pickle.dump(data_sucess_history, f, pickle.HIGHEST_PROTOCOL)
+    with open('POMDP/dataset/data_sucess_value.pickle', 'wb') as f:
+        pickle.dump(data_sucess_value, f, pickle.HIGHEST_PROTOCOL)
+    with open('POMDP/dataset/data_fail_history.pickle', 'wb') as f:
+        pickle.dump(data_fail_history, f, pickle.HIGHEST_PROTOCOL)
+    with open('POMDP/dataset/data_fail_value.pickle', 'wb') as f:
+        pickle.dump(data_fail_value, f, pickle.HIGHEST_PROTOCOL)
     
-    # planning
-    print("==== Planning ====")
-    print("Inital state: %s" % light_dark_problem.env.state)
-    print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
-    total_reward = 0
-    total_num_sims = 0
-    total_plan_time = 0.0
-    for i in range(planning_horizon):
-        best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
-        
-        # |FIXME|
-        next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
-        # planner.update() -> ??real observation에 따라서 node가 새로 생길 수도 있는데 그럼 tree 무용지물??이게 replanning인가??이미 탐색했던 observation에서 sample 해야하나??
-        # real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
-        # 이전까지 탐색했던 observation 중에서 랜덤하게 선택??
-        real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
-        reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
-        total_reward = reward + discont_factor*total_reward
-        total_num_sims += sims_count
-        total_plan_time += time_taken
-
-        planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
-        
-        print("==== Step %d ====" % (i+1))
-        print("Action: %s" % str(best_action))
-        print("True state: %s" % light_dark_problem.env.state)
-        print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
-        print("Observation: %s" % real_observation)
-        print("Reward: %s" % str(reward))
-        print("Num sims: %d" % sims_count)
-        print("Plan time: %.5f" % time_taken)
-            
-        # |NOTE| for B(s)
-        # if isinstance(light_dark_problem.agent.cur_belief, Histogram):
-        #     new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
-        #                                          best_action, real_observation,
-        #                                          light_dark_problem.agent.observation_model,
-        #                                          light_dark_problem.agent.transition_model)
-        #     light_dark_problem.agent.set_belief(new_belief)
-
-        if reward == 100:
-            print("\n")
-            print("==== Success ====")
-            print("Total reward: %.5f" % total_reward)
-            print("History:", planner.history)
-            print("Total Num sims: %d" % total_num_sims)
-            print("Total Plan time: %.5f" % total_plan_time)
-            break
-        elif i == planning_horizon-1:
-            print("==== Fail ====")
-            print("Total reward: %.5f" % total_reward)
-            print("History:", planner.history)
-            print("Total Num sims: %d" % total_num_sims)
-            print("Total Plan time: %.5f" % total_plan_time)
-            
     
     # # Visualization
     # x_range = (-1, 7)
