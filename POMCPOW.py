@@ -126,26 +126,26 @@ class POMCPOW(Planner):
         action = self._ActionProgWiden(vnode=root, history=history)
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
         
-        _history_action = root[action]
-        if len(_history_action.children) <= k_o*_history_action.num_visits**alpha_o:
+        self._history_action = root[action]
+        if len(self._history_action.children) <= k_o*self._history_action.num_visits**alpha_o:
             if root[action][observation] is None:
                 # |TODO| M(hao) <- M(hao)+1 필요 없음?
                 # |NOTE| history_action_observation_node : temporal
-                _history_action_observation_node = self._VNode(agent=self._agent, root=False)
+                self._history_action_observation_node = self._VNode(agent=self._agent, root=False)
         else:
             observation = random.choice(list(root[action].children.keys()))
-            _history_action_observation_node = root[action][observation]
+            self._history_action_observation_node = root[action][observation]
 
         history += ((action, observation), )
         # |NOTE| append s` to B(hao)
         # |FIXME| B(hao)에 s`을 추가해야 하는데 B(h)를 복사한 후에 s`을 추가하고 있음
-        _history_action_observation_node.belief.add(next_state)
+        self._history_action_observation_node.belief.add(next_state)
         # |NOTE| append Z(o|s,a,s`) to W(hao)
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, action)
-        _history_action_observation_node.belief[next_state] = prob
+        self._history_action_observation_node.belief[next_state] = prob
 
         if observation not in root[action].children:
-            root[action][observation] = _history_action_observation_node
+            root[action][observation] = self._history_action_observation_node
             total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1)
         else:
             # |NOTE| s` <- select B(hao)[i] w.p W(hao)[i]/sigma(j=1~m) W(hao)[j]

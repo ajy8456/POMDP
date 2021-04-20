@@ -9,8 +9,9 @@ import sys
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import time
-
-
+import pickle
+    
+    
 class State(State):
     """The state of the problem is just the robot position"""
     def __init__(self, position):
@@ -441,37 +442,41 @@ class LightDarkViz:
 
 
 def main():
-    init_state = State(tuple(np.array([2.5, 2.5])))
-    goal_state = State(tuple(np.array([0.0, 0.0])))
-    init_belief = Histogram({State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()]))):1.0})
-    
-    # defines the observation noise equation.
-    light = 5
-    const = 0
-
-    # planning horizon
-    planning_horizon = 30
-
-    # defines discount_factor
-    discont_factor = 0.9
-    
-    # creates POMDP model
-    light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
-    light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
-
-    # set planner
-    planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
-                      discount_factor=discont_factor, exploration_const=math.sqrt(2),
-                      num_visits_init=0, value_init=0)
-
     data_sucess_history = []
     data_sucess_value = []
     data_fail_history = []
     data_fail_value = []
     num_sucess = 0
     num_fail = 0
-    num_planning = 5000
-    for n in range(num_planning):    
+    num_planning = 10000
+
+    for n in range(num_planning):
+        print("========================================================") 
+        print("========================= %d-th ========================" % (n+1)) 
+        print("========================================================") 
+        init_state = State(tuple(np.array([2.5, 2.5])))
+        goal_state = State(tuple(np.array([0.0, 0.0])))
+        init_belief = Histogram({State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()]))):1.0})
+        
+        # defines the observation noise equation.
+        light = 5
+        const = 0
+
+        # planning horizon
+        planning_horizon = 30
+
+        # defines discount_factor
+        discont_factor = 0.9
+        
+        # creates POMDP model
+        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
+        light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
+
+        # set planner
+        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
+                        discount_factor=discont_factor, exploration_const=math.sqrt(2),
+                        num_visits_init=0, value_init=0)
+
         # planning
         print("==== Planning ====")
         print("Inital state: %s" % light_dark_problem.env.state)
@@ -534,16 +539,15 @@ def main():
                 data_fail_history.append(planner.history[:-1])
                 data_fail_value.append(total_reward)
 
-    # save data
-    import pickle
-    with open('POMDP/dataset/data_sucess_history.pickle', 'wb') as f:
-        pickle.dump(data_sucess_history, f, pickle.HIGHEST_PROTOCOL)
-    with open('POMDP/dataset/data_sucess_value.pickle', 'wb') as f:
-        pickle.dump(data_sucess_value, f, pickle.HIGHEST_PROTOCOL)
-    with open('POMDP/dataset/data_fail_history.pickle', 'wb') as f:
-        pickle.dump(data_fail_history, f, pickle.HIGHEST_PROTOCOL)
-    with open('POMDP/dataset/data_fail_value.pickle', 'wb') as f:
-        pickle.dump(data_fail_value, f, pickle.HIGHEST_PROTOCOL)
+        # save data
+        with open('POMDP/dataset/data_sucess_history.pickle', 'ab') as f:
+            pickle.dump(data_sucess_history, f, pickle.HIGHEST_PROTOCOL)
+        with open('POMDP/dataset/data_sucess_value.pickle', 'ab') as f:
+            pickle.dump(data_sucess_value, f, pickle.HIGHEST_PROTOCOL)
+        with open('POMDP/dataset/data_fail_history.pickle', 'ab') as f:
+            pickle.dump(data_fail_history, f, pickle.HIGHEST_PROTOCOL)
+        with open('POMDP/dataset/data_fail_value.pickle', 'ab') as f:
+            pickle.dump(data_fail_value, f, pickle.HIGHEST_PROTOCOL)
     
     
     # # Visualization
