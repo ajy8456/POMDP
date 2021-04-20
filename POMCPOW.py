@@ -44,7 +44,8 @@ class POMCPOW(Planner):
         self._last_planning_time = -1
 
         # self.history = tuple(pomdp.agent._init_belief)
-        self.history = tuple(list(pomdp.agent._init_belief.histogram.keys())[0].position)
+        self.history = []
+        self.history.append(list(list(pomdp.agent._init_belief.histogram.keys())[0].position))
 
     @property
     def update_agent_belief(self):
@@ -247,8 +248,8 @@ class POMCPOW(Planner):
             raise ValueError("Particle deprivation.")
 
         # Update history
-        self.history += real_action,
-        self.history += real_observation.position,
+        self.history.append(list(real_action))
+        self.history.append(list(real_observation.position))
 
         # Update the state
         env.apply_transition(next_state)

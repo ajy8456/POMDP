@@ -1,3 +1,4 @@
+import os
 from POMDP_framework import *
 from POMCP import *
 from POMCPOW import *
@@ -11,7 +12,7 @@ from matplotlib.collections import PolyCollection
 import time
 import pickle
     
-    
+
 class State(State):
     """The state of the problem is just the robot position"""
     def __init__(self, position):
@@ -80,8 +81,8 @@ class Observation(Observation):
             an estimate of the robot position :math:`g(x_t)\in\Omega`.
 
     """
-    # the number of decimals to round up an observation when it is discrete.
-    PRECISION=2
+    # # the number of decimals to round up an observation when it is discrete.
+    # PRECISION=2
     
     def __init__(self, position, discrete=False):
         """
@@ -96,8 +97,9 @@ class Observation(Observation):
         if self._discrete:
             self.position = position
         else:
-            self.position = (round(position[0], Observation.PRECISION),
-                             round(position[1], Observation.PRECISION))
+            # self.position = (round(position[0], Observation.PRECISION),
+            #                  round(position[1], Observation.PRECISION))
+            self.position = (position[0], position[1])
 
     def discretize(self):
         return Observation(self.position, discrete=True)
@@ -442,13 +444,13 @@ class LightDarkViz:
 
 
 def main():
-    data_sucess_history = []
-    data_sucess_value = []
-    data_fail_history = []
-    data_fail_value = []
+
     num_sucess = 0
     num_fail = 0
-    num_planning = 10000
+    num_planning = 5000
+    save_dir = os.path.join(os.getcwd(),'POMDP/dataset')
+    if not os.path.exists(save_dir):
+        os.mkdir(save_dir)
 
     for n in range(num_planning):
         print("========================================================") 
@@ -473,7 +475,7 @@ def main():
         light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
 
         # set planner
-        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=100,
+        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=1000,
                         discount_factor=discont_factor, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
@@ -525,8 +527,11 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
-                data_sucess_history.append(planner.history[:-1])
-                data_sucess_value.append(total_reward)
+                # save data
+                with open(os.path.join(save_dir,'data_sucess_history.pickle'), 'ab') as f:
+                    pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                with open(os.path.join(save_dir,'data_sucess_value.pickle'), 'ab') as f:
+                    pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
                 break
 
             elif i == planning_horizon-1:
@@ -536,18 +541,14 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
-                data_fail_history.append(planner.history[:-1])
-                data_fail_value.append(total_reward)
-
-        # save data
-        with open('POMDP/dataset/data_sucess_history.pickle', 'ab') as f:
-            pickle.dump(data_sucess_history, f, pickle.HIGHEST_PROTOCOL)
-        with open('POMDP/dataset/data_sucess_value.pickle', 'ab') as f:
-            pickle.dump(data_sucess_value, f, pickle.HIGHEST_PROTOCOL)
-        with open('POMDP/dataset/data_fail_history.pickle', 'ab') as f:
-            pickle.dump(data_fail_history, f, pickle.HIGHEST_PROTOCOL)
-        with open('POMDP/dataset/data_fail_value.pickle', 'ab') as f:
-            pickle.dump(data_fail_value, f, pickle.HIGHEST_PROTOCOL)
+                with open(os.path.join(save_dir,'data_fail_history.pickle'), 'ab') as f:
+                    pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
+                    pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+    
+    print("====Finish===")
+    print("num_sucess: %d" % num_sucess)
+    print("num_fail: %d" % num_fail)
     
     
     # # Visualization
