@@ -254,8 +254,8 @@ def main():
                            rollout_policy=tiger_problem.agent.policy_model)
     test_planner(tiger_problem, pomcp, nsteps=10)
 
-    # visualize_pouct_search_tree(tiger_problem.agent.tree,
-    #                                             max_depth=5, anonymize=False)
+    visualize_pouct_search_tree(tiger_problem.agent.tree,
+                                                max_depth=5, anonymize=False)
 
 if __name__ == '__main__':
     main()

@@ -149,6 +149,10 @@ class POMCP(Planner):
         self._last_num_sims = -1
         self._last_planning_time = -1
 
+
+        self.cnt = 0
+
+
     @property
     def update_agent_belief(self):
         """True if planner's update function also updates agent's belief."""
@@ -274,6 +278,8 @@ class POMCP(Planner):
                                                                                observation,
                                                                                depth+nsteps)
         if depth == 1 and root is not None:
+            self.cnt += 1
+            print("True!!!!!!!!", self.cnt)
             root.belief.add(state)  # belief update happens as simulation goes.
         root.num_visits += 1
         root[action].num_visits += 1

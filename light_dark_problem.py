@@ -447,8 +447,8 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 5000
-    save_dir = os.path.join(os.getcwd(),'POMDP/dataset')
+    num_planning = 1
+    save_dir = os.path.join(os.getcwd(),'POMDP/dataset_less_sim')
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
@@ -458,7 +458,14 @@ def main():
         print("========================================================") 
         init_state = State(tuple(np.array([2.5, 2.5])))
         goal_state = State(tuple(np.array([0.0, 0.0])))
-        init_belief = Histogram({State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()]))):1.0})
+        init_belief = State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()])))
+        gaussian_noise = Gaussian([0,0],
+                                  [[1, 0],
+                                   [0, 1]])
+        omega = (init_belief.position[0] - init_state.position[0],
+                 init_belief.position[1] - init_state.position[1])
+        prob = gaussian_noise[omega]
+        init_belief = Histogram({init_belief:prob})
         
         # defines the observation noise equation.
         light = 5
@@ -511,13 +518,13 @@ def main():
             print("Num sims: %d" % sims_count)
             print("Plan time: %.5f" % time_taken)
                 
-            # |NOTE| for B(s)
-            # if isinstance(light_dark_problem.agent.cur_belief, Histogram):
-            #     new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
-            #                                          best_action, real_observation,
-            #                                          light_dark_problem.agent.observation_model,
-            #                                          light_dark_problem.agent.transition_model)
-            #     light_dark_problem.agent.set_belief(new_belief)
+            # |NOTE| belief state update by Bayes' law
+            if isinstance(light_dark_problem.agent.cur_belief, Histogram):
+                new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
+                                                     best_action, real_observation,
+                                                     light_dark_problem.agent.observation_model,
+                                                     light_dark_problem.agent.transition_model)
+                light_dark_problem.agent.set_belief(new_belief)
 
             if reward == 100:
                 print("\n")

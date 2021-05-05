@@ -99,7 +99,7 @@ class POMCPOW(Planner):
         _action = (_action_x,_action_y)
         return _action
 
-    def _ActionProgWiden(self, vnode, history, k_a=30, alpha_a=1/30):
+    def _ActionProgWiden(self, vnode, history, k_a=10, alpha_a=1/10):
         _history = vnode
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             _action = self._NextAction()
@@ -108,7 +108,7 @@ class POMCPOW(Planner):
                 vnode[_action] = history_action_node
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, k_o=5, alpha_o=1/15): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, k_o=3, alpha_o=1/3): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
