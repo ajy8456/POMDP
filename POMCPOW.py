@@ -1,12 +1,13 @@
-from POMDP_framework import Action, Agent, POMDP, State, Observation,\
-     ObservationModel, TransitionModel, GenerativeDistribution, PolicyModel, Planner,\
-     Particles, particle_reinvigoration, sample_generative_model
-from POMCP import TreeNode, QNode, VNode, RootVNode, VNodeParticles, RootVNodeParticles,\
-    RolloutPolicy, RandomRollout
+from POMDP_framework import Particles
+from POMDP_framework import *
+from POMCP import *
+# |TODO| How to use light_dark_problem.State
+from light_dark_problem import State
 import copy
 import time
 import random
 import math
+import numpy as np
 
 
 class POMCPOW(Planner):
@@ -44,8 +45,9 @@ class POMCPOW(Planner):
         self._last_planning_time = -1
 
         # self.history = tuple(pomdp.agent._init_belief)
+        # self.history.append(list(list(pomdp.agent._init_belief.histogram.keys())[0].position))
         self.history = []
-        self.history.append(list(list(pomdp.agent._init_belief.histogram.keys())[0].position))
+
 
     @property
     def update_agent_belief(self):
@@ -62,11 +64,11 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent):
-        # Only works if the agent's belief is particles
-        if not isinstance(agent.belief, Particles):
-            raise TypeError("Agent's belief is not represented in particles.\n"\
-                            "POMCP not usable. Please convert it to particles.")
+    def plan(self, agent, horizon, init_belief_variance):
+        # # Only works if the agent's belief is particles
+        # if not isinstance(agent.belief, Particles):
+        #     raise TypeError("Agent's belief is not represented in particles.\n"\
+        #                     "POMCP not usable. Please convert it to particles.")
 
         self._agent = agent   # switch focus on planning for the given agent
         if not hasattr(self._agent, "tree"):
@@ -77,7 +79,18 @@ class POMCPOW(Planner):
         start_time = time.time()
 
         while True:
-            state = self._agent.sample_belief()
+            if horizon == 0:
+                _init_belief = State(tuple(np.array([self._pomdp.env.init_state.position[0]+init_belief_variance*np.random.randn(), self._pomdp.env.init_state.position[1]+init_belief_variance*np.random.randn()])))
+                gaussian_noise = Gaussian([0,0],
+                                          [[init_belief_variance, 0],
+                                           [0, init_belief_variance]])
+                omega = (_init_belief.position[0] - self._pomdp.env.init_state.position[0],
+                         _init_belief.position[1] - self._pomdp.env.init_state.position[1])
+                prob = gaussian_noise[omega]
+                self._agent._cur_belief[_init_belief] = prob 
+                state = _init_belief
+            else:
+                state = self._agent.sample_belief()
             self._simulate(state, self._agent.history, self._agent.tree, None, None, 0)
             sims_count +=1
             time_taken = time.time() - start_time
@@ -85,7 +98,8 @@ class POMCPOW(Planner):
                 break
             if self._num_sims > 0 and sims_count >= self._num_sims:
                 break
-        
+        if horizon == 0:
+            self.history.append(self._agent._cur_belief.get_histogram())
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
@@ -127,28 +141,28 @@ class POMCPOW(Planner):
         action = self._ActionProgWiden(vnode=root, history=history)
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
         
-        self._history_action = root[action]
-        if len(self._history_action.children) <= k_o*self._history_action.num_visits**alpha_o:
+        if len(root[action].children) <= k_o*root[action].num_visits**alpha_o:
             if root[action][observation] is None:
-                # |TODO| M(hao) <- M(hao)+1 필요 없음?
-                # |NOTE| history_action_observation_node : temporal
-                self._history_action_observation_node = self._VNode(agent=self._agent, root=False)
+                # |FIXME| M(hao) <- M(hao) + 1
+                pass
         else:
+            # |FIXME| o <- selet w.p. M(hao)/SIGMA_o M(hao)
             observation = random.choice(list(root[action].children.keys()))
-            self._history_action_observation_node = root[action][observation]
 
         history += ((action, observation), )
-        # |NOTE| append s` to B(hao)
-        # |FIXME| B(hao)에 s`을 추가해야 하는데 B(h)를 복사한 후에 s`을 추가하고 있음
-        self._history_action_observation_node.belief.add(next_state)
-        # |NOTE| append Z(o|s,a,s`) to W(hao)
+
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, action)
-        self._history_action_observation_node.belief[next_state] = prob
 
         if observation not in root[action].children:
-            root[action][observation] = self._history_action_observation_node
+            # |NOTE| append s` to B(hao)
+            # |NOTE| append Z(o|s,a,s`) to W(hao)
+            root[action][observation] = self._VNode(agent=self._agent, root=False)
+            root[action][observation].belief[next_state] = prob
             total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1)
         else:
+            # |NOTE| append s` to B(hao)
+            # |NOTE| append Z(o|s,a,s`) to W(hao)
+            root[action][observation].belief[next_state] += prob
             # |NOTE| s` <- select B(hao)[i] w.p W(hao)[i]/sigma(j=1~m) W(hao)[j]
             next_state = root[action][observation].belief.random()
             # |NOTE| r <- R(s,a,s`)
@@ -221,12 +235,15 @@ class POMCPOW(Planner):
             if agent is None:
                 return VNodeParticles(self._num_visits_init,
                                       self._value_init,
-                                      belief=Particles([]))
+                                      belief=Histogram({}))
+                                    #   belief=Particles([]))
+
             else:
                 return VNodeParticles(self._num_visits_init,
                                       self._value_init,
+                                      belief=Histogram({}))
                                     #   belief=copy.deepcopy(agent.belief))
-                                      belief=Particles([]))
+                                    #   belief=Particles([]))
 
     def update(self, agent, env, real_action, next_state, real_observation, state_transform_func=None):
         """
@@ -235,17 +252,18 @@ class POMCPOW(Planner):
         `state_transform_func`: Used to add artificial transform to states during
             particle reinvigoration. Signature: s -> s_transformed
         """
-        if not isinstance(agent.belief, Particles):
-            raise TypeError("agent's belief is not represented in particles.\n"\
-                            "POMCP not usable. Please convert it to particles.")
+        # if not isinstance(agent.belief, Particles):
+        #     raise TypeError("agent's belief is not represented in particles.\n"\
+        #                     "POMCP not usable. Please convert it to particles.")
         if not hasattr(agent, "tree"):
             print("Warning: agent does not have tree. Have you planned yet?")
             return
         
-        # |FIXME|
+        # |FIXME| create new root node
         if agent.tree[real_action][real_observation] is None:
-            # Never anticipated the real_observation. No reinvigoration can happen.
-            raise ValueError("Particle deprivation.")
+            # # Never anticipated the real_observation. No reinvigoration can happen.
+            # raise ValueError("Particle deprivation.")
+            agent.tree[real_action][real_observation] = self._VNode(agent=agent, root=False)
 
         # Update history
         self.history.append(list(real_action))
@@ -255,12 +273,27 @@ class POMCPOW(Planner):
         env.apply_transition(next_state)
 
         # Update the tree; Reinvigorate the tree's belief and use it as the updated belief for the agent.
+        # use particles of h node
+        tree_belief = agent.belief
         agent.tree = RootVNodeParticles.from_vnode(agent.tree[real_action][real_observation], agent.history)
-        tree_belief = agent.tree.belief
-        agent.set_belief(particle_reinvigoration(tree_belief,
-                                                 len(agent.init_belief),
-                                                 state_transform_func=state_transform_func))
-        # If observation was never encountered in simulation, then tree will be None;
+        # # use particles of hao node
+        # tree_belief = agent.tree.belief
+
+        # |NOTE| particle reinvigoration(when belief is represented by Particles)
+        # If observation was encountered less in simulation, then tree will be None;
         # particle reinvigoration will occur.
+        if isinstance(tree_belief, Particles):
+            agent.set_belief(particle_reinvigoration(tree_belief,
+                                                    len(agent.init_belief),
+                                                    state_transform_func=state_transform_func))
+            
+        # |NOTE| belief state update by Bayes' law(when belief is represented by Histogram)
+        if isinstance(tree_belief, Histogram):
+            new_belief = update_histogram_belief(tree_belief,
+                                                 real_action, real_observation,
+                                                 agent.observation_model,
+                                                 agent.transition_model)
+            agent.set_belief(new_belief)        
+
         if agent.tree is not None:
             agent.tree.belief = copy.deepcopy(agent.belief)

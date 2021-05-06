@@ -133,9 +133,9 @@ class TransitionModel(TransitionModel):
         """
         expected_position = tuple(self.func(state.position, action))
         if next_state.position == expected_position:
-            return 1.0 - self.epsilon
+            return 1.0 - self._epsilon
         else:
-            return self.epsilon
+            return self._epsilon
 
     def sample(self, state, action):
         next_state = copy.deepcopy(state)
@@ -233,6 +233,7 @@ class ObservationModel(ObservationModel):
         return fn
 
 
+# |FIXME| goal condition을 belief에 대해서, reward도?
 class RewardModel(RewardModel):
     def __init__(self, goal_state, epsilon=0.1):
         self._goal_state = goal_state
@@ -281,6 +282,7 @@ class LightDarkEnvironment(Environment):
         """
         self._light = light
         self._const = const
+        self.init_state = init_state
         transition_model = TransitionModel()
         if type(init_state) == np.ndarray:
             init_state = State(init_state)
@@ -458,28 +460,24 @@ def main():
         print("========================================================") 
         init_state = State(tuple(np.array([2.5, 2.5])))
         goal_state = State(tuple(np.array([0.0, 0.0])))
-        init_belief = State(tuple(np.array([2.5+np.random.randn(), 2.5+np.random.randn()])))
-        gaussian_noise = Gaussian([0,0],
-                                  [[1, 0],
-                                   [0, 1]])
-        omega = (init_belief.position[0] - init_state.position[0],
-                 init_belief.position[1] - init_state.position[1])
-        prob = gaussian_noise[omega]
-        init_belief = Histogram({init_belief:prob})
+        init_belief_variance = 0.1
+        init_belief = Histogram({})
         
         # defines the observation noise equation.
         light = 5
         const = 0
 
         # planning horizon
-        planning_horizon = 30
+        planning_horizon = 5
 
         # defines discount_factor
         discont_factor = 0.9
         
         # creates POMDP model
         light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
-        light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
+        # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
+        light_dark_problem.agent.set_belief(init_belief)
+
 
         # set planner
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=1000,
@@ -488,20 +486,22 @@ def main():
 
         # planning
         print("==== Planning ====")
-        print("Inital state: %s" % light_dark_problem.env.state)
-        print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
         total_reward = 0
         total_num_sims = 0
         total_plan_time = 0.0
         for i in range(planning_horizon):
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent)
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, init_belief_variance)
+            
+            if i == 0:
+                print("Inital state: %s" % light_dark_problem.env.state)
+                print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
+                print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
-            # planner.update() -> ??real observation에 따라서 node가 새로 생길 수도 있는데 그럼 tree 무용지물??이게 replanning인가??이미 탐색했던 observation에서 sample 해야하나??
-            # real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
-            # 이전까지 탐색했던 observation 중에서 랜덤하게 선택??
-            real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
+            real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
+            # 이전까지 탐색했던 observation 중에서 랜덤하게 선택 - unrealistic
+            # real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
             reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
             total_reward = reward + discont_factor*total_reward
             total_num_sims += sims_count
@@ -513,18 +513,12 @@ def main():
             print("Action: %s" % str(best_action))
             print("True state: %s" % light_dark_problem.env.state)
             print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
+            print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             print("Observation: %s" % real_observation)
             print("Reward: %s" % str(reward))
             print("Num sims: %d" % sims_count)
             print("Plan time: %.5f" % time_taken)
                 
-            # |NOTE| belief state update by Bayes' law
-            if isinstance(light_dark_problem.agent.cur_belief, Histogram):
-                new_belief = update_histogram_belief(light_dark_problem.agent.cur_belief,
-                                                     best_action, real_observation,
-                                                     light_dark_problem.agent.observation_model,
-                                                     light_dark_problem.agent.transition_model)
-                light_dark_problem.agent.set_belief(new_belief)
 
             if reward == 100:
                 print("\n")
@@ -534,11 +528,11 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
-                # save data
-                with open(os.path.join(save_dir,'data_sucess_history.pickle'), 'ab') as f:
-                    pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                with open(os.path.join(save_dir,'data_sucess_value.pickle'), 'ab') as f:
-                    pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                # # save data
+                # with open(os.path.join(save_dir,'data_sucess_history.pickle'), 'ab') as f:
+                #     pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                # with open(os.path.join(save_dir,'data_sucess_value.pickle'), 'ab') as f:
+                #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
                 break
 
             elif i == planning_horizon-1:
@@ -548,10 +542,11 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
-                with open(os.path.join(save_dir,'data_fail_history.pickle'), 'ab') as f:
-                    pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
-                    pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                # # save data
+                # with open(os.path.join(save_dir,'data_fail_history.pickle'), 'ab') as f:
+                #     pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                # with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
+                #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
     
     print("====Finish===")
     print("num_sucess: %d" % num_sucess)
