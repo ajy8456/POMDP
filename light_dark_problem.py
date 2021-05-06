@@ -1,3 +1,4 @@
+from POMDP_framework import Histogram, expectation_histogram
 import os
 from POMDP_framework import *
 from POMCP import *
@@ -240,6 +241,10 @@ class RewardModel(RewardModel):
         self._epsilon=epsilon
 
     def _reward_func(self, state, action, next_state, goal_state, epsilon):
+        # for belief state
+        if isinstance(next_state, Histogram):
+            next_state = expectation_histogram(next_state)
+
         if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon:
             reward = 100
             return reward
@@ -449,7 +454,7 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
+    num_planning = 10
     save_dir = os.path.join(os.getcwd(),'POMDP/dataset_less_sim')
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
@@ -502,13 +507,14 @@ def main():
             real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
             # 이전까지 탐색했던 observation 중에서 랜덤하게 선택 - unrealistic
             # real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
-            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
-            total_reward = reward + discont_factor*total_reward
             total_num_sims += sims_count
             total_plan_time += time_taken
 
             planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
-            
+            # |FIXME| correct?
+            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
+            total_reward = reward + discont_factor*total_reward
+
             print("==== Step %d ====" % (i+1))
             print("Action: %s" % str(best_action))
             print("True state: %s" % light_dark_problem.env.state)
@@ -524,7 +530,7 @@ def main():
                 print("\n")
                 print("==== Success ====")
                 print("Total reward: %.5f" % total_reward)
-                print("History:", planner.history)
+                # print("History:", planner.history)
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
