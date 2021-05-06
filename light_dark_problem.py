@@ -463,8 +463,8 @@ def main():
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================") 
-        init_state = State(tuple(np.array([2.5, 2.5])))
-        goal_state = State(tuple(np.array([0.0, 0.0])))
+        init_state = State(tuple(5*(np.random.rand(2)-0.5)))
+        goal_state = State(tuple(5*(np.random.rand(2)-0.5)))
         init_belief_variance = 0.1
         init_belief = Histogram({})
         
