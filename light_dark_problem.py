@@ -463,8 +463,8 @@ def main():
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================") 
-        init_state = State(tuple(5*(np.random.rand(2)-0.5)))
-        goal_state = State(tuple(5*(np.random.rand(2)-0.5)))
+        init_state = State(tuple(2.5 + (np.random.rand(2)-0.5)))
+        goal_state = State(tuple((np.random.rand(2)-0.5)))
         init_belief_variance = 0.1
         init_belief = Histogram({})
         
@@ -473,7 +473,7 @@ def main():
         const = 0
 
         # planning horizon
-        planning_horizon = 5
+        planning_horizon = 30
 
         # defines discount_factor
         discont_factor = 0.9
@@ -498,7 +498,9 @@ def main():
             best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, init_belief_variance)
             
             if i == 0:
+                print("Goal state: %s" % goal_state)
                 print("Inital state: %s" % light_dark_problem.env.state)
+                print("Inital belief state expectation:", expectation_histogram(light_dark_problem.agent.cur_belief))
                 print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             
@@ -512,15 +514,17 @@ def main():
 
             planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
             # |FIXME| correct?
-            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.env.state, best_action, next_state)
+            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, next_state)
             total_reward = reward + discont_factor*total_reward
 
             print("==== Step %d ====" % (i+1))
             print("Action: %s" % str(best_action))
+            print("Observation: %s" % real_observation)
+            print("Goal state: %s" % goal_state)
             print("True state: %s" % light_dark_problem.env.state)
+            print("Belief state expectation:", expectation_histogram(light_dark_problem.agent.cur_belief))
             print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
             print("Number of particles:", len(light_dark_problem.agent.cur_belief))
-            print("Observation: %s" % real_observation)
             print("Reward: %s" % str(reward))
             print("Num sims: %d" % sims_count)
             print("Plan time: %.5f" % time_taken)
@@ -544,7 +548,7 @@ def main():
             elif i == planning_horizon-1:
                 print("==== Fail ====")
                 print("Total reward: %.5f" % total_reward)
-                print("History:", planner.history)
+                # print("History:", planner.history)
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1

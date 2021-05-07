@@ -999,6 +999,7 @@ def abstraction_over_histogram(current_histogram, state_mapper):
         hist[a_s] += current_histogram[s]
     return hist
 
+# |FIXME| check correction -> dict의 keys가 변하지 않고 있음
 def update_histogram_belief(current_histogram, 
                             real_action, real_observation,
                             observation_model, transition_model, oargs={},
