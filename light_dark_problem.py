@@ -1,4 +1,3 @@
-from POMDP_framework import Histogram, expectation_histogram
 import os
 from POMDP_framework import *
 from POMCP import *
@@ -234,27 +233,42 @@ class ObservationModel(ObservationModel):
         return fn
 
 
-# |FIXME| goal condition을 belief에 대해서, reward도?
 class RewardModel(RewardModel):
     def __init__(self, goal_state, epsilon=0.1):
         self._goal_state = goal_state
         self._epsilon=epsilon
 
-    def _reward_func(self, state, action, next_state, goal_state, epsilon):
-        # for belief state
-        if isinstance(next_state, Histogram):
-            next_state = expectation_histogram(next_state)
+    def _reward_func_state(self, state, action, next_state, goal_state, epsilon):
+        # for state - be used to simulation
+        reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
+        return reward
 
-        if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon:
-            reward = 100
-            return reward
-        else:
-            reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
-            return reward
+    def _reward_func_belief(self, state: Histogram, action: Action, next_state, goal_state: State, epsilon: float):
+        # for belief state - be used to real action
+        normalized_hist = state.get_normalized()
+        reward_expectatation = 0
+        for state_in in normalized_hist:
+            reward_expectatation += normalized_hist[state_in] * self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
+        return reward_expectatation
 
     def sample(self, state, action, next_state):
+        # |TODO| make exception
         # deterministic
-        return self._reward_func(state, action, next_state, self._goal_state, self._epsilon)
+        if str(type(next_state)) == "<class '__main__.State'>":
+            return self._reward_func_state(state, action, next_state, self._goal_state, self._epsilon)
+        # |TODO| currently, get reward after update, can make same as state case(before update)?
+        elif str(type(state)) == "<class 'POMDP_framework.Histogram'>":
+            return self._reward_func_belief(state, action, next_state, self._goal_state, self._epsilon)
+    
+    def is_goal(self, state: Histogram, thres=0.8):
+        # test goal condition: #particle(prob) in goal_state >= thres -> True
+        prob_in_goal = 0
+        normalized_hist = state.get_normalized()
+        for particle in normalized_hist:
+            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
+                prob_in_goal += normalized_hist[particle]
+        print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
+        return prob_in_goal >= thres
 
 
 class PolicyModel(RandomRollout):
@@ -317,6 +331,19 @@ class LightDarkProblem(POMDP):
                                    RewardModel(goal_state))     # reward model
         
         super().__init__(agent, env, name="LightDarkProblem")
+
+
+def expectation_histogram(hist: Histogram):
+    total_weight = 0
+    weighted_sum = [0,0]
+    for state in hist:
+        total_weight += hist[state]
+        pos = state.position
+        weighted_sum[0] += hist[state]*pos[0]
+        weighted_sum[1] += hist[state]*pos[1]
+    weighted_sum[0] /= total_weight
+    weighted_sum[1] /= total_weight
+    return weighted_sum
 
 
 class LightDarkViz:
@@ -455,6 +482,8 @@ def main():
     num_sucess = 0
     num_fail = 0
     num_planning = 10
+    num_particles = 1000
+    random_range = 1
     # save_dir = os.path.join(os.getcwd(),'./dataset_less_sim')
     # if not os.path.exists(save_dir):
     #     os.mkdir(save_dir)
@@ -463,10 +492,16 @@ def main():
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================") 
-        init_state = State(tuple(2.5 + (np.random.rand(2)-0.5)))
-        goal_state = State(tuple((np.random.rand(2)-0.5)))
-        init_belief_variance = 0.1
+        init_state = State(tuple(2.5 + random_range * (np.random.rand(2) - 0.5)))
+        goal_state = State(tuple(random_range * (np.random.rand(2) - 0.5)))
+
+        # inital belief state is uniformly distribution
+        # init_belief_variance = 0.5
         init_belief = Histogram({})
+        while len(init_belief) < num_particles:
+            sample = State(tuple(2.5 + random_range * (np.random.rand(2)-0.5)))
+            init_belief[sample] = 1 / (random_range**2 * num_particles)
+
         
         # defines the observation noise equation.
         light = 5
@@ -485,7 +520,7 @@ def main():
 
 
         # set planner
-        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=1000,
+        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=num_particles,
                         discount_factor=discont_factor, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
@@ -495,7 +530,7 @@ def main():
         total_num_sims = 0
         total_plan_time = 0.0
         for i in range(planning_horizon):
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, init_belief_variance)
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i)
             
             if i == 0:
                 print("Goal state: %s" % goal_state)
@@ -507,13 +542,15 @@ def main():
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
             real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
-            # 이전까지 탐색했던 observation 중에서 랜덤하게 선택 - unrealistic
+            
+            # select observataion node in existing node - unrealistic
             # real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
+            
             total_num_sims += sims_count
             total_plan_time += time_taken
 
             planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
-            # |FIXME| correct?
+            # |TODO| can move before update to avoid confusion state case and belief case?
             reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, next_state)
             total_reward = reward + discont_factor*total_reward
 
@@ -530,7 +567,7 @@ def main():
             print("Plan time: %.5f" % time_taken)
                 
 
-            if reward == 100:
+            if light_dark_problem.env.reward_model.is_goal(light_dark_problem.agent.cur_belief):
                 print("\n")
                 print("==== Success ====")
                 print("Total reward: %.5f" % total_reward)

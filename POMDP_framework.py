@@ -978,16 +978,15 @@ class Histogram(GenerativeDistribution):
         prob_sum = sum(self._histogram[state] for state in self._histogram)
         return abs(1.0-prob_sum) < epsilon
     
-
-def expectation_histogram(hist: Histogram):
-    total_weight = 0
-    weighted_sum = [0,0]
-    for state in hist:
-        total_weight += hist[state]
-        pos = state.position
-        weighted_sum[0] += hist[state]*pos[0]
-        weighted_sum[1] += hist[state]*pos[1]
-    return weighted_sum/total_weight
+    def get_normalized(self):
+        total_weight = 0
+        normalized_hist = {}
+        for state in self._histogram:
+            total_weight += self._histogram[state]
+        for state in self._histogram:
+            normalized_hist[state] = self._histogram[state] / total_weight
+        return normalized_hist
+    
 
 def abstraction_over_histogram(current_histogram, state_mapper):
     state_mappings = {s:state_mapper(s) for s in current_histogram}

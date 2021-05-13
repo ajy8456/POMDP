@@ -64,7 +64,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon, init_belief_variance):
+    def plan(self, agent, horizon):
         # # Only works if the agent's belief is particles
         # if not isinstance(agent.belief, Particles):
         #     raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -79,18 +79,20 @@ class POMCPOW(Planner):
         start_time = time.time()
 
         while True:
-            if horizon == 0:
-                _init_belief = State(tuple(np.array([self._pomdp.env.init_state.position[0]+init_belief_variance*np.random.randn(), self._pomdp.env.init_state.position[1]+init_belief_variance*np.random.randn()])))
-                gaussian_noise = Gaussian([0,0],
-                                          [[init_belief_variance, 0],
-                                           [0, init_belief_variance]])
-                omega = (_init_belief.position[0] - self._pomdp.env.init_state.position[0],
-                         _init_belief.position[1] - self._pomdp.env.init_state.position[1])
-                prob = gaussian_noise[omega]
-                self._agent._cur_belief[_init_belief] = prob 
-                state = _init_belief
-            else:
-                state = self._agent.sample_belief()
+            # # initial belief state is gaussian
+            # if horizon == 0:
+            #     _init_belief = State(tuple(np.array([self._pomdp.env.init_state.position[0]+init_belief_variance*np.random.randn(), self._pomdp.env.init_state.position[1]+init_belief_variance*np.random.randn()])))
+            #     gaussian_noise = Gaussian([0,0],
+            #                               [[init_belief_variance, 0],
+            #                                [0, init_belief_variance]])
+            #     omega = (_init_belief.position[0] - self._pomdp.env.init_state.position[0],
+            #              _init_belief.position[1] - self._pomdp.env.init_state.position[1])
+            #     prob = gaussian_noise[omega]
+            #     self._agent._cur_belief[_init_belief] = prob 
+            #     state = _init_belief
+            # else:
+            #     state = self._agent.sample_belief()
+            state = self._agent.sample_belief()
             self._simulate(state, self._agent.history, self._agent.tree, None, None, 0)
             sims_count +=1
             time_taken = time.time() - start_time
