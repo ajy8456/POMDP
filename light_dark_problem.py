@@ -239,7 +239,11 @@ class RewardModel(RewardModel):
         self._epsilon=epsilon
 
     def _reward_func_state(self, state, action, next_state, goal_state, epsilon):
-        # for state - be used to simulation
+        # for state
+        # if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
+        #     reward = 100    
+        # else:
+        #     reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
         reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
         return reward
 
@@ -260,13 +264,25 @@ class RewardModel(RewardModel):
         elif str(type(state)) == "<class 'POMDP_framework.Histogram'>":
             return self._reward_func_belief(state, action, next_state, self._goal_state, self._epsilon)
     
-    def is_goal(self, state: Histogram, thres=0.8):
+    # # For Histogram
+    # def is_goal(self, state: Histogram, thres=0.8):
+    #     # test goal condition: #particle(prob) in goal_state >= thres -> True
+    #     prob_in_goal = 0
+    #     normalized_hist = state.get_normalized()
+    #     for particle in normalized_hist:
+    #         if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
+    #             prob_in_goal += normalized_hist[particle]
+    #     print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
+    #     return prob_in_goal >= thres
+    
+    def is_goal(self, state: Particles, thres=0.7):
         # test goal condition: #particle(prob) in goal_state >= thres -> True
+        num_particles = len(state)
         prob_in_goal = 0
-        normalized_hist = state.get_normalized()
-        for particle in normalized_hist:
+        for particle in state.particles:
             if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
-                prob_in_goal += normalized_hist[particle]
+                prob_in_goal += 1
+        prob_in_goal /= num_particles
         print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
         return prob_in_goal >= thres
 
@@ -333,17 +349,29 @@ class LightDarkProblem(POMDP):
         super().__init__(agent, env, name="LightDarkProblem")
 
 
-def expectation_histogram(hist: Histogram):
-    total_weight = 0
-    weighted_sum = [0,0]
-    for state in hist:
-        total_weight += hist[state]
-        pos = state.position
-        weighted_sum[0] += hist[state]*pos[0]
-        weighted_sum[1] += hist[state]*pos[1]
-    weighted_sum[0] /= total_weight
-    weighted_sum[1] /= total_weight
-    return weighted_sum
+def expectation_belief(belief: Particles):
+    # # For Histogram
+    # total_weight = 0
+    # weighted_sum = [0,0]
+    # for state in hist:
+    #     total_weight += hist[state]
+    #     pos = state.position
+    #     weighted_sum[0] += hist[state]*pos[0]
+    #     weighted_sum[1] += hist[state]*pos[1]
+    # weighted_sum[0] /= total_weight
+    # weighted_sum[1] /= total_weight
+    
+    # For Particles
+    num_particles = len(belief)
+    expectation = [0, 0]
+    for p in belief.particles:
+        pos = p.position
+        expectation[0] += pos[0]
+        expectation[1] += pos[1]
+    expectation[0] /= num_particles
+    expectation[1] /= num_particles
+    
+    return expectation
 
 
 class LightDarkViz:
@@ -411,7 +439,7 @@ class LightDarkViz:
         if self._goal_pos is not None:
             util.plot_circle(self._ax,
                              self._goal_pos,
-                             0.25,  # tentative
+                             0.1,  # tentative
                              linewidth=1, edgecolor="blue",
                              zorder=3)
         
@@ -497,10 +525,13 @@ def main():
 
         # inital belief state is uniformly distribution
         # init_belief_variance = 0.5
-        init_belief = Histogram({})
+        # init_belief = Histogram({})
+        init_belief = []
         while len(init_belief) < num_particles:
             sample = State(tuple(2.5 + random_range * (np.random.rand(2)-0.5)))
-            init_belief[sample] = 1 / (random_range**2 * num_particles)
+            init_belief.append(sample)
+            # init_belief[sample] = 1 / (random_range**2 * num_particles)
+        init_belief = Particles(init_belief)
 
         
         # defines the observation noise equation.
@@ -535,8 +566,8 @@ def main():
             if i == 0:
                 print("Goal state: %s" % goal_state)
                 print("Inital state: %s" % light_dark_problem.env.state)
-                print("Inital belief state expectation:", expectation_histogram(light_dark_problem.agent.cur_belief))
-                print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
+                print("Inital belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
+                # print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             
             # |FIXME|
@@ -559,8 +590,8 @@ def main():
             print("Observation: %s" % real_observation)
             print("Goal state: %s" % goal_state)
             print("True state: %s" % light_dark_problem.env.state)
-            print("Belief state expectation:", expectation_histogram(light_dark_problem.agent.cur_belief))
-            print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
+            print("Belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
+            # print("Belief state: %s" % str(light_dark_problem.agent.cur_belief))
             print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             print("Reward: %s" % str(reward))
             print("Num sims: %d" % sims_count)
@@ -594,32 +625,33 @@ def main():
                 #     pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
                 # with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
                 #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+            
+        # Visualization
+        x_range = (-1, 7)
+        y_range = (-2, 4)
+        viz = LightDarkViz(light_dark_problem.env, x_range, y_range, 0.1)
+        viz.set_goal(goal_state.position)
+        # viz.set_initial_belief_pos(b_0[0])
+        # viz.log_position(tuple(b_0[0]), path=0)
+        # viz.log_position(tuple(b_0[0]), path=1)
+
+        # for m_i, _, _ in plan:
+        #     viz.log_position(tuple(m_i), path=0)
+
+        viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
+                                1: [(0,0,0), (255,0,0)]},
+                    path_styles={0: "--",
+                                1: "-"},
+                    path_widths={0: 4,
+                                1: 1})
+        plt.show()    
     
     print("====Finish===")
     print("num_sucess: %d" % num_sucess)
     print("num_fail: %d" % num_fail)
     
     
-    # # Visualization
-    # x_range = (-1, 7)
-    # y_range = (-2, 4)
-    # viz = LightDarkViz(env, x_range, y_range, 0.1)
-    # viz.set_goal(goal_pos)
-    # viz.set_initial_belief_pos(b_0[0])
-    # viz.log_position(tuple(b_0[0]), path=0)
-    # viz.log_position(tuple(b_0[0]), path=1)
 
-    # sysd_b_plan = [b_0]
-    # for m_i, _, _ in plan:
-    #     viz.log_position(tuple(m_i), path=0)
-
-    # viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
-    #                       1: [(0,0,0), (255,0,0)]},
-    #          path_styles={0: "--",
-    #                       1: "-"},
-    #          path_widths={0: 4,
-    #                       1: 1})
-    # plt.show()    
 
 
 if __name__ == '__main__':

@@ -1,4 +1,3 @@
-from POMDP_framework import Particles
 from POMDP_framework import *
 from POMCP import *
 # |TODO| How to use light_dark_problem.State
@@ -65,10 +64,10 @@ class POMCPOW(Planner):
         return self._last_planning_time
     
     def plan(self, agent, horizon):
-        # # Only works if the agent's belief is particles
-        # if not isinstance(agent.belief, Particles):
-        #     raise TypeError("Agent's belief is not represented in particles.\n"\
-        #                     "POMCP not usable. Please convert it to particles.")
+        # Only works if the agent's belief is particles
+        if not isinstance(agent.belief, Particles):
+            raise TypeError("Agent's belief is not represented in particles.\n"\
+                            "POMCP not usable. Please convert it to particles.")
 
         self._agent = agent   # switch focus on planning for the given agent
         if not hasattr(self._agent, "tree"):
@@ -284,11 +283,15 @@ class POMCPOW(Planner):
         # |NOTE| particle reinvigoration(when belief is represented by Particles)
         # If observation was encountered less in simulation, then tree will be None;
         # particle reinvigoration will occur.
+        # if isinstance(tree_belief, Particles):
+        #     agent.set_belief(particle_reinvigoration(tree_belief,
+        #                                             len(agent.init_belief),
+        #                                             state_transform_func=state_transform_func))
+
+        # |NOTE| bootstrap filtering(when belief is represented by Particels)
         if isinstance(tree_belief, Particles):
-            agent.set_belief(particle_reinvigoration(tree_belief,
-                                                    len(agent.init_belief),
-                                                    state_transform_func=state_transform_func))
-            
+            agent.set_belief(bootstrap_filter(tree_belief, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief)))
+
         # |NOTE| belief state update by Bayes' law(when belief is represented by Histogram)
         if isinstance(tree_belief, Histogram):
             new_belief = update_histogram_belief(tree_belief,

@@ -1153,7 +1153,7 @@ def bootstrap_filter(particles: Particles,
     
     prediction = []
     weights = []
-    for particle in particles:
+    for particle in particles.particles:
         # importance sampling step
         next_sample = transition_model.sample(particle, real_action)
         prediction.append(next_sample)
