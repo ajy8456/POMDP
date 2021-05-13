@@ -280,7 +280,7 @@ class RewardModel(RewardModel):
         num_particles = len(state)
         prob_in_goal = 0
         for particle in state.particles:
-            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
+            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
                 prob_in_goal += 1
         prob_in_goal /= num_particles
         print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
@@ -346,6 +346,8 @@ class LightDarkProblem(POMDP):
                                    const,                       # const
                                    RewardModel(goal_state))     # reward model
         
+        self.goal_state = goal_state
+        
         super().__init__(agent, env, name="LightDarkProblem")
 
 
@@ -377,7 +379,7 @@ def expectation_belief(belief: Particles):
 class LightDarkViz:
     """This class deals with visualizing a light dark domain"""
 
-    def __init__(self, env, x_range, y_range, res):
+    def __init__(self, problem: LightDarkProblem, x_range, y_range, res):
         """
         Args:
             env (LightDarkEnvironment): Environment for light dark domain.
@@ -386,38 +388,74 @@ class LightDarkViz:
             res (float): specifies the size of each rectangular strip to draw;
                 As in the paper, the light is at a location on the x axis.
         """
-        self._env = env
+        self._env = problem.env
         self._res = res
         self._x_range = x_range
         self._y_range = y_range
         fig = plt.gcf()
         self._ax = fig.add_subplot(1,1,1)
-        self._goal_pos = None
-        self._m_0 = None  # initial belief pose
+        self._goal_pos = problem.goal_state.position
+        self._init_pos = problem.env.init_state.position
+        # self._m_0 = None  # initial belief pose
+        self._init_belief = []
+        for p in problem.agent._init_belief.particles:
+            self._init_belief.append(p.position)
+        self._init_belief = np.asarray(self._init_belief).T
 
         # For tracking the path; list of robot position tuples
         self._log_paths = {}
+        self._log_state = []
+        self._log_belief = []
+        self._log_belief_expectation = []
 
     def log_position(self, position, path=0):
         if path not in self._log_paths:
             self._log_paths[path] = []
         self._log_paths[path].append(position)
+    
+    def log_state(self, state):
+        log = state.position
+        log = np.asarray(log).T
+        self._log_state.append(log)
+
+    def log_belief_expectation(self, belief_expectation):
+        log = np.asarray(belief_expectation).T
+        self._log_belief_expectation.append(log)
+
+    def log_belief(self, belief):
+        log = []
+        for p in belief.particles:
+            log.append(p.position)
+        log = np.asarray(log).T
+        self._log_belief.append(log)
 
     def set_goal(self, goal_pos):
         self._goal_pos = goal_pos
 
-    def set_initial_belief_pos(self, m_0):
-        self._m_0 = m_0
+    def set_init_state(self, init_pos):
+        self._init_pos = init_pos
+
+    # def set_initial_belief_pos(self, m_0):
+    #     self._m_0 = m_0
+
+    # |FIXME| change Particles to array
+    def set_init_belief(self, init_belief):
+        self._init_belief = init_belief
 
     def plot(self,
-             path_colors={0: [(0,0,0), (0,0,254)]},
-             path_styles={0: "--"},
+             path_colors={0: [(0,0,0), (0,0,0)]},
+             path_styles={0: "-"},
              path_widths={0: 1}):
         self._plot_gradient()
         self._plot_path(path_colors, path_styles, path_widths)
-        self._plot_robot()
+        # self._plot_robot()
         self._plot_goal()
-        self._plot_initial_belief_pos()
+        self._plot_init_state()
+        # self._plot_initial_belief_pos()
+        self._plot_initial_belief()
+        self._plot_state()
+        self._plot_log_belief()
+        self._plot_log_belief_expectation()
 
     def _plot_robot(self):
         cur_pos = self._env.state.position
@@ -427,13 +465,13 @@ class LightDarkViz:
                          linewidth=1, edgecolor="black",
                          zorder=3)
 
-    def _plot_initial_belief_pos(self):
-        if self._m_0 is not None:
-            util.plot_circle(self._ax, self._m_0,
-                             0.25, # tentative
-                             color="black", fill=False,
-                             linewidth=1, edgecolor="black",
-                             zorder=3)
+    # def _plot_initial_belief_pos(self):
+    #     if self._m_0 is not None:
+    #         util.plot_circle(self._ax, self._m_0,
+    #                          0.25, # tentative
+    #                          color="black", fill=False,
+    #                          linewidth=1, edgecolor="black",
+    #                          zorder=3)
 
     def _plot_goal(self):
         if self._goal_pos is not None:
@@ -442,7 +480,29 @@ class LightDarkViz:
                              0.1,  # tentative
                              linewidth=1, edgecolor="blue",
                              zorder=3)
-        
+    
+    def _plot_init_state(self):
+        plt.scatter(self._init_pos[0], self._init_pos[1], c = 'k')
+    
+    def _plot_state(self):
+        s = np.asarray(self._log_state).T
+        plt.scatter(s[0], s[1], c='k')
+        plt.plot(s[0], s[1], c='k')
+
+    def _plot_initial_belief(self):
+        if self._init_belief is not None:
+            plt.scatter(self._init_belief[0], self._init_belief[1], s=0.1 ,c='g')
+    
+    def _plot_log_belief(self):
+        for b in self._log_belief:
+            plt.scatter(b[0], b[1], s=0.1 ,c='g')
+
+    def _plot_log_belief_expectation(self):
+        p = np.asarray(self._log_belief_expectation).T
+        plt.scatter(p[0], p[1], c='r')
+        plt.plot(p[0], p[1], c='r')
+
+
     def _plot_path(self, colors, styles, linewidths):
         """Plot robot path"""
         # Plot line segments
@@ -509,7 +569,7 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 10
+    num_planning = 1
     num_particles = 1000
     random_range = 1
     # save_dir = os.path.join(os.getcwd(),'./dataset_less_sim')
@@ -524,15 +584,19 @@ def main():
         goal_state = State(tuple(random_range * (np.random.rand(2) - 0.5)))
 
         # inital belief state is uniformly distribution
-        # init_belief_variance = 0.5
         # init_belief = Histogram({})
         init_belief = []
-        while len(init_belief) < num_particles:
-            sample = State(tuple(2.5 + random_range * (np.random.rand(2)-0.5)))
-            init_belief.append(sample)
+        # # For uniform initialization
+        # while len(init_belief) < num_particles:
+        #     sample = State(tuple(2.5 + random_range * (np.random.rand(2)-0.5)))
+        #     init_belief.append(sample)
             # init_belief[sample] = 1 / (random_range**2 * num_particles)
+        # For gaussian initalization
+        init_belief_std = 0.1
+        while len(init_belief) < num_particles:
+            sample = State(tuple(np.asarray(init_state.position) + init_belief_std * (np.random.randn(2))))
+            init_belief.append(sample)
         init_belief = Particles(init_belief)
-
         
         # defines the observation noise equation.
         light = 5
@@ -555,6 +619,11 @@ def main():
                         discount_factor=discont_factor, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
+        # Visualization setting
+        x_range = (-2, 6)
+        y_range = (-2, 4)
+        viz = LightDarkViz(light_dark_problem, x_range, y_range, 0.1)
+
         # planning
         print("==== Planning ====")
         total_reward = 0
@@ -569,7 +638,9 @@ def main():
                 print("Inital belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
                 # print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
-            
+                viz.log_state(light_dark_problem.env.state)
+                viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
+
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
             real_observation = light_dark_problem.agent.observation_model.sample(next_state, best_action)
@@ -626,14 +697,13 @@ def main():
                 # with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
                 #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
             
-        # Visualization
-        x_range = (-1, 7)
-        y_range = (-2, 4)
-        viz = LightDarkViz(light_dark_problem.env, x_range, y_range, 0.1)
-        viz.set_goal(goal_state.position)
-        # viz.set_initial_belief_pos(b_0[0])
-        # viz.log_position(tuple(b_0[0]), path=0)
-        # viz.log_position(tuple(b_0[0]), path=1)
+
+            # viz.set_initial_belief_pos(b_0[0])
+            # viz.log_position(tuple(b_0[0]), path=0)
+            # viz.log_position(tuple(b_0[0]), path=1)
+            viz.log_state(light_dark_problem.env.state)
+            viz.log_belief(light_dark_problem.agent.cur_belief)
+            viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
 
         # for m_i, _, _ in plan:
         #     viz.log_position(tuple(m_i), path=0)
