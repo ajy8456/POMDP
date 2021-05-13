@@ -1141,3 +1141,34 @@ class Gaussian(GenerativeDistribution):
             return X.tolist()[0]
         else:
             return X.tolist()
+
+
+# |TODO| where?
+def bootstrap_filter(particles: Particles,
+                     real_action: Action,
+                     real_observation: Observation,
+                     observation_model: ObservationModel,
+                     transition_model: TransitionModel,
+                     num_particle: int):
+    
+    prediction = []
+    weights = []
+    for particle in particles:
+        # importance sampling step
+        next_sample = transition_model.sample(particle, real_action)
+        prediction.append(next_sample)
+
+        weight = observation_model.probability(real_observation, next_sample, real_action)
+        weights.append(weight)
+    
+    weights_normalized = np.asarray(weights)
+    weights_normalized /= np.sum(weights_normalized)
+
+    # selection step
+    indices = range(len(prediction))
+    new_particle_indices = np.random.choice(indices, size=num_particle, p=weights_normalized)
+    new_particle = []
+    for index in new_particle_indices:
+        new_particle.append(prediction[index])
+
+    return Particles(new_particle)
