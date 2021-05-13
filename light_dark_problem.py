@@ -455,9 +455,9 @@ def main():
     num_sucess = 0
     num_fail = 0
     num_planning = 10
-    save_dir = os.path.join(os.getcwd(),'POMDP/dataset_less_sim')
-    if not os.path.exists(save_dir):
-        os.mkdir(save_dir)
+    # save_dir = os.path.join(os.getcwd(),'./dataset_less_sim')
+    # if not os.path.exists(save_dir):
+    #     os.mkdir(save_dir)
 
     for n in range(num_planning):
         print("========================================================") 

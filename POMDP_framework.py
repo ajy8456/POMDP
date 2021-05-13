@@ -999,7 +999,6 @@ def abstraction_over_histogram(current_histogram, state_mapper):
         hist[a_s] += current_histogram[s]
     return hist
 
-# |FIXME| check correction -> dict의 keys가 변하지 않고 있음
 def update_histogram_belief(current_histogram, 
                             real_action, real_observation,
                             observation_model, transition_model, oargs={},
@@ -1036,8 +1035,12 @@ def update_histogram_belief(current_histogram,
     new_histogram = {}  # state space still the same.
     total_prob = 0
     if next_state_space is None:
-        next_state_space = current_histogram
-    for next_state in next_state_space:
+        # next_state_space = current_histogram
+        next_state_space_keys = []
+        for cur_state in current_histogram.histogram.keys():
+            next_state_sample = transition_model.sample(cur_state, real_action)
+            next_state_space_keys.append(next_state_sample)
+    for next_state in next_state_space_keys:
         observation_prob = observation_model.probability(real_observation,
                                                          next_state,
                                                          real_action,
