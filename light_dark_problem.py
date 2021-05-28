@@ -185,6 +185,7 @@ class ObservationModel(ObservationModel):
         return np.array([[variance, 0],
                          [0, variance]])
 
+    # |FIXME| observe according to true/belief state??
     def probability(self, observation, next_state, action):
         """
         The observation is :math:`g(x_t) = x_t+\omega`. So
@@ -264,18 +265,25 @@ class RewardModel(RewardModel):
         elif str(type(state)) == "<class 'POMDP_framework.Histogram'>":
             return self._reward_func_belief(state, action, next_state, self._goal_state, self._epsilon)
     
-    # # For Histogram
-    # def is_goal(self, state: Histogram, thres=0.8):
-    #     # test goal condition: #particle(prob) in goal_state >= thres -> True
-    #     prob_in_goal = 0
-    #     normalized_hist = state.get_normalized()
-    #     for particle in normalized_hist:
-    #         if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
-    #             prob_in_goal += normalized_hist[particle]
-    #     print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
-    #     return prob_in_goal >= thres
+    # For State
+    def is_goal_state(self, state: State):
+        if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon:
+            return True
+        return False
+
+    # For Histogram
+    def is_goal_hist(self, state: Histogram, thres=0.7):
+        # test goal condition: #particle(prob) in goal_state >= thres -> True
+        prob_in_goal = 0
+        normalized_hist = state.get_normalized()
+        for particle in normalized_hist:
+            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
+                prob_in_goal += normalized_hist[particle]
+        print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
+        return prob_in_goal >= thres
     
-    def is_goal(self, state: Particles, thres=0.7):
+    # For Particles
+    def is_goal_particles(self, state: Particles, thres=0.7):
         # test goal condition: #particle(prob) in goal_state >= thres -> True
         num_particles = len(state)
         prob_in_goal = 0
@@ -606,7 +614,7 @@ def main():
         planning_horizon = 30
 
         # defines discount_factor
-        discont_factor = 0.9
+        discont_factor = 1.0
         
         # creates POMDP model
         light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
@@ -615,7 +623,7 @@ def main():
 
 
         # set planner
-        planner = POMCPOW(pomdp=light_dark_problem, max_depth=5, planning_time=-1., num_sims=num_particles,
+        planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
                         discount_factor=discont_factor, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
@@ -630,9 +638,9 @@ def main():
         total_num_sims = 0
         total_plan_time = 0.0
         for i in range(planning_horizon):
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i)
-            
+            logging = False
             if i == 0:
+                logging = True
                 print("Goal state: %s" % goal_state)
                 print("Inital state: %s" % light_dark_problem.env.state)
                 print("Inital belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
@@ -640,6 +648,8 @@ def main():
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
                 viz.log_state(light_dark_problem.env.state)
                 viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
+
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging)
 
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
@@ -651,7 +661,7 @@ def main():
             total_num_sims += sims_count
             total_plan_time += time_taken
 
-            planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+            check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
             # |TODO| can move before update to avoid confusion state case and belief case?
             reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, next_state)
             total_reward = reward + discont_factor*total_reward
@@ -669,7 +679,7 @@ def main():
             print("Plan time: %.5f" % time_taken)
                 
 
-            if light_dark_problem.env.reward_model.is_goal(light_dark_problem.agent.cur_belief):
+            if check_goal:
                 print("\n")
                 print("==== Success ====")
                 print("Total reward: %.5f" % total_reward)

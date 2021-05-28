@@ -1171,4 +1171,4 @@ def bootstrap_filter(particles: Particles,
     for index in new_particle_indices:
         new_particle.append(prediction[index])
 
-    return Particles(new_particle)
+    return Particles(new_particle), Particles(prediction)

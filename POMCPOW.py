@@ -6,12 +6,13 @@ import copy
 import time
 import random
 import math
+import pickle
 import numpy as np
 
 
 class POMCPOW(Planner):
     def __init__(self, pomdp,
-                 max_depth=5, planning_time=-1., num_sims=-1,
+                 max_depth, planning_time=-1., num_sims=-1,
                  discount_factor=0.9, exploration_const=math.sqrt(2),
                  num_visits_init=0, value_init=0,
                  action_prior=None):
@@ -47,6 +48,11 @@ class POMCPOW(Planner):
         # self.history.append(list(list(pomdp.agent._init_belief.histogram.keys())[0].position))
         self.history = []
 
+        # For logging simulation result
+        # dict: {key: str(sims_count), value: Tuple(log_path: list[np.array], total_reward: float)}
+        self.log = {}
+        self.path = None
+
 
     @property
     def update_agent_belief(self):
@@ -63,7 +69,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon):
+    def plan(self, agent, horizon, logging = False):
         # Only works if the agent's belief is particles
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -92,7 +98,16 @@ class POMCPOW(Planner):
             # else:
             #     state = self._agent.sample_belief()
             state = self._agent.sample_belief()
-            self._simulate(state, self._agent.history, self._agent.tree, None, None, 0)
+        
+            if logging:
+                self.log_path = []
+                self.log_path.append(state.position)
+        
+            total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging)
+        
+            if logging:
+                self.log[str(sims_count)] = (self.log_path, total_reward)
+        
             sims_count +=1
             time_taken = time.time() - start_time
             if self._planning_time > 0 and time_taken > self._planning_time:
@@ -105,9 +120,15 @@ class POMCPOW(Planner):
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
         self._agent.tree.value = self._agent.tree[best_action].value
+
+        if logging:
+            with open('simulation_log.pickle', 'wb') as f:
+                pickle.dump(self.log, f)
+
         return best_action, time_taken, sims_count
 
-    # |NOTE| uniformly random    
+    # |NOTE| uniformly random
+    # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain
     def _NextAction(self):
         _action_x = random.uniform(-1,1)
         _action_y = random.uniform(-1,1)
@@ -123,7 +144,7 @@ class POMCPOW(Planner):
                 vnode[_action] = history_action_node
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, k_o=3, alpha_o=1/3): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, k_o=3, alpha_o=1/3): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
@@ -141,7 +162,10 @@ class POMCPOW(Planner):
 
         action = self._ActionProgWiden(vnode=root, history=history)
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
-        
+
+        if logging:
+            self.log_path.append(next_state.position)
+
         if len(root[action].children) <= k_o*root[action].num_visits**alpha_o:
             if root[action][observation] is None:
                 # |FIXME| M(hao) <- M(hao) + 1
@@ -159,21 +183,31 @@ class POMCPOW(Planner):
             # |NOTE| append Z(o|s,a,s`) to W(hao)
             root[action][observation] = self._VNode(agent=self._agent, root=False)
             root[action][observation].belief[next_state] = prob
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging)
         else:
             # |NOTE| append s` to B(hao)
             # |NOTE| append Z(o|s,a,s`) to W(hao)
             root[action][observation].belief[next_state] += prob
             # |NOTE| s` <- select B(hao)[i] w.p W(hao)[i]/sigma(j=1~m) W(hao)[j]
             next_state = root[action][observation].belief.random()
+
+            if logging:
+                self.log_path.pop()
+                self.log_path.append(next_state.position)
+
             # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
+
+            # |NOTE| check goal condition while simulating 
+            if self._pomdp.env.reward_model.is_goal_state(next_state):
+                depth = self._max_depth
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
                                                                             history,
                                                                             root[action][observation],
                                                                             root[action],
                                                                             observation,
-                                                                            depth+nsteps)
+                                                                            depth+nsteps,
+                                                                            logging=logging)
         
         # |TODO| agent.tree->Q->V check
         root.num_visits += 1
@@ -181,15 +215,24 @@ class POMCPOW(Planner):
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
         return total_reward
 
-    def _rollout(self, state, history, root, depth): # root<-class:VNode
-        discount = 1.0
+    def _rollout(self, state, history, root, depth, logging): # root<-class:VNode
+        discount = self._discount_factor
         total_discounted_reward = 0.0
 
         while depth < self._max_depth:
             action = self._NextAction()
             next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
+
+            if logging:
+                self.log_path.append(next_state.position)
+
             history = history + ((action, observation),)
-            depth += nsteps
+
+            # |NOTE| check goal condition while rollout
+            if self._pomdp.env.reward_model.is_goal_state(next_state):
+                depth = self._max_depth
+            else:
+                depth += nsteps
             total_discounted_reward += reward * discount
             discount *= (self._discount_factor**nsteps)
             state = next_state
@@ -290,7 +333,9 @@ class POMCPOW(Planner):
 
         # |NOTE| bootstrap filtering(when belief is represented by Particels)
         if isinstance(tree_belief, Particles):
-            agent.set_belief(bootstrap_filter(tree_belief, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief)))
+            new_belief, prediction = bootstrap_filter(tree_belief, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief))
+            check_goal = env.reward_model.is_goal_particles(prediction)
+            agent.set_belief(new_belief)
 
         # |NOTE| belief state update by Bayes' law(when belief is represented by Histogram)
         if isinstance(tree_belief, Histogram):
@@ -299,6 +344,10 @@ class POMCPOW(Planner):
                                                  agent.observation_model,
                                                  agent.transition_model)
             agent.set_belief(new_belief)        
+            # |TODO| change as Particles - check using prediction
+            check_goal = env.reward_model.is_goal_hist(new_belief)
 
         if agent.tree is not None:
             agent.tree.belief = copy.deepcopy(agent.belief)
+        
+        return check_goal
