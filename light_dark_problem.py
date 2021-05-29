@@ -186,7 +186,7 @@ class ObservationModel(ObservationModel):
                          [0, variance]])
 
     # |FIXME| observe according to true/belief state??
-    def probability(self, observation, next_state, action):
+    def probability(self, observation, next_true_state, next_belief, action):
         """
         The observation is :math:`g(x_t) = x_t+\omega`. So
         the probability of this observation is the probability
@@ -194,12 +194,12 @@ class ObservationModel(ObservationModel):
         """
         # if self._discrete:
         #     observation = observation.discretize()
-        variance = self._compute_variance(next_state.position)
+        variance = self._compute_variance(next_true_state.position)
         gaussian_noise = Gaussian([0,0],
                                   [[variance, 0],
                                    [0, variance]])
-        omega = (observation.position[0] - next_state.position[0],
-                 observation.position[1] - next_state.position[1])
+        omega = (observation.position[0] - next_belief.position[0],
+                 observation.position[1] - next_belief.position[1])
         return gaussian_noise[omega]
 
     def sample(self, next_state, action, argmax=False):
@@ -258,13 +258,13 @@ class RewardModel(RewardModel):
 
     def sample(self, state, action, next_state):
         # |TODO| make exception
-        # deterministic
+        # deterministic      
         if str(type(next_state)) == "<class '__main__.State'>":
             return self._reward_func_state(state, action, next_state, self._goal_state, self._epsilon)
         # |TODO| currently, get reward after update, can make same as state case(before update)?
         elif str(type(state)) == "<class 'POMDP_framework.Histogram'>":
             return self._reward_func_belief(state, action, next_state, self._goal_state, self._epsilon)
-    
+
     # For State
     def is_goal_state(self, state: State):
         if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon:

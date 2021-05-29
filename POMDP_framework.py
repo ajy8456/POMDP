@@ -1145,6 +1145,7 @@ class Gaussian(GenerativeDistribution):
 
 # |TODO| where?
 def bootstrap_filter(particles: Particles,
+                     real_state: State,
                      real_action: Action,
                      real_observation: Observation,
                      observation_model: ObservationModel,
@@ -1158,7 +1159,7 @@ def bootstrap_filter(particles: Particles,
         next_sample = transition_model.sample(particle, real_action)
         prediction.append(next_sample)
 
-        weight = observation_model.probability(real_observation, next_sample, real_action)
+        weight = observation_model.probability(real_observation, real_state, next_sample, real_action)
         weights.append(weight)
     
     weights_normalized = np.asarray(weights)
