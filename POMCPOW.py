@@ -130,8 +130,8 @@ class POMCPOW(Planner):
     # |NOTE| uniformly random
     # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain
     def _NextAction(self):
-        _action_x = random.uniform(-1,1)
-        _action_y = random.uniform(-1,1)
+        _action_x = random.uniform(-6,6)
+        _action_y = random.uniform(-6,6)
         _action = (_action_x,_action_y)
         return _action
 
@@ -176,7 +176,7 @@ class POMCPOW(Planner):
 
         history += ((action, observation), )
 
-        prob = self._pomdp.agent._observation_model.probability(observation, next_state, action)
+        prob = self._pomdp.agent._observation_model.probability(observation, next_state, next_state, action)
 
         if observation not in root[action].children:
             # |NOTE| append s` to B(hao)
@@ -333,7 +333,7 @@ class POMCPOW(Planner):
 
         # |NOTE| bootstrap filtering(when belief is represented by Particels)
         if isinstance(tree_belief, Particles):
-            new_belief, prediction = bootstrap_filter(tree_belief, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief))
+            new_belief, prediction = bootstrap_filter(tree_belief, next_state, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief))
             check_goal = env.reward_model.is_goal_particles(prediction)
             agent.set_belief(new_belief)
 
