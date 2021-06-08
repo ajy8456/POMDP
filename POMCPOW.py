@@ -129,16 +129,17 @@ class POMCPOW(Planner):
 
     # |NOTE| uniformly random
     # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain
-    def _NextAction(self):
-        _action_x = random.uniform(-6,6)
-        _action_y = random.uniform(-6,6)
+    def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
+        pos = state.position
+        _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
+        _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
         _action = (_action_x,_action_y)
         return _action
 
-    def _ActionProgWiden(self, vnode, history, k_a=10, alpha_a=1/10):
+    def _ActionProgWiden(self, vnode, history, state, k_a=10, alpha_a=1/10):
         _history = vnode
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
-            _action = self._NextAction()
+            _action = self._NextAction(state)
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
@@ -160,7 +161,7 @@ class POMCPOW(Planner):
             if parent is not None:
                 parent[observation] = root
 
-        action = self._ActionProgWiden(vnode=root, history=history)
+        action = self._ActionProgWiden(vnode=root, history=history, state=state)
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
         if logging:

@@ -235,7 +235,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon=0.1):
+    def __init__(self, light, goal_state, epsilon=0.3):
         self.light = light
         self._goal_state = goal_state
         self._epsilon=epsilon
