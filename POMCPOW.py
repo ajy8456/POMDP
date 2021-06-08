@@ -221,7 +221,7 @@ class POMCPOW(Planner):
         total_discounted_reward = 0.0
 
         while depth < self._max_depth:
-            action = self._NextAction()
+            action = self._NextAction(state)
             next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
             if logging:

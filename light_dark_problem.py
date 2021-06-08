@@ -235,26 +235,33 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon=0.3):
+    def __init__(self, light, goal_state, epsilon=0.2):
         self.light = light
         self._goal_state = goal_state
         self._epsilon=epsilon
 
-    def _reward_func_state(self, state, action, next_state, goal_state, epsilon):
+    def _reward_func_state(self, state: State, action, next_state: State, goal_state: State, epsilon):
         if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
             reward = 100
         else:
-            reward = (-1) * np.abs(next_state.position[0] - self.light)
-            # reward = -1
+            # reward = (-1) * np.abs(next_state.position[0] - self.light)
+            reward = -1
         return reward
 
         # # Euclidean distance
         # reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
         # return reward
 
-    def _reward_func_belief(self, state: Histogram, action: Action, next_state, goal_state: State, epsilon: float):
+    def _reward_func_particle(self, state: Particles, action: Action, next_state: Particles, goal_state: State, epsilon: float):
         # for belief state - be used to real action
-        normalized_hist = state.get_normalized()
+        reward_expectatation = 0
+        for state_in in next_state.particles:
+            reward_expectatation += self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
+        return reward_expectatation / len(next_state)
+
+    def _reward_func_hist(self, state: Histogram, action: Action, next_state: Histogram, goal_state: State, epsilon: float):
+        # for belief state - be used to real action
+        normalized_hist = next_state.get_normalized()
         reward_expectatation = 0
         for state_in in normalized_hist:
             reward_expectatation += normalized_hist[state_in] * self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
@@ -266,9 +273,11 @@ class RewardModel(RewardModel):
         if str(type(next_state)) == "<class '__main__.State'>":
             return self._reward_func_state(state, action, next_state, self._goal_state, self._epsilon)
         # |TODO| currently, get reward after update, can make same as state case(before update)?
-        elif str(type(state)) == "<class 'POMDP_framework.Histogram'>":
-            return self._reward_func_belief(state, action, next_state, self._goal_state, self._epsilon)
-
+        elif str(type(next_state)) == "<class 'POMDP_framework.Particles'>":
+            return self._reward_func_particle(state, action, next_state, self._goal_state, self._epsilon)
+        elif str(type(next_state)) == "<class 'POMDP_framework.Histogram'>":
+            return self._reward_func_hist(state, action, next_state, self._goal_state, self._epsilon)
+        
     # For State
     def is_goal_state(self, state: State):
         if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon:
@@ -489,7 +498,7 @@ class LightDarkViz:
         if self._goal_pos is not None:
             util.plot_circle(self._ax,
                              self._goal_pos,
-                             0.1,  # tentative
+                             0.2,  # tentative
                              linewidth=1, edgecolor="blue",
                              zorder=3)
     
@@ -578,11 +587,12 @@ class LightDarkViz:
 
 
 def main():
+    plotting = True
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
-    num_particles = 10000
+    num_planning = 100
+    num_particles = 1000
     random_range = 1
     # save_dir = os.path.join(os.getcwd(),'./dataset_less_sim')
     # if not os.path.exists(save_dir):
@@ -593,7 +603,7 @@ def main():
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================") 
         init_state = State(tuple(2.5 + random_range * (np.random.rand(2) - 0.5)))
-        goal_state = State(tuple(random_range * (np.random.rand(2) - 0.5)))
+        goal_state = State((0, 0))
 
         # inital belief state is uniformly distribution
         # init_belief = Histogram({})
@@ -604,7 +614,7 @@ def main():
         #     init_belief.append(sample)
             # init_belief[sample] = 1 / (random_range**2 * num_particles)
         # For gaussian initalization
-        init_belief_std = 0.1
+        init_belief_std = 0.2
         while len(init_belief) < num_particles:
             sample = State(tuple(np.asarray(init_state.position) + init_belief_std * (np.random.randn(2))))
             init_belief.append(sample)
@@ -618,7 +628,7 @@ def main():
         planning_horizon = 30
 
         # defines discount_factor
-        discont_factor = 1.0
+        discont_factor = 0.9
         
         # creates POMDP model
         light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
@@ -632,9 +642,10 @@ def main():
                         num_visits_init=0, value_init=0)
 
         # Visualization setting
-        x_range = (-2, 10)
-        y_range = (-2, 8)
-        viz = LightDarkViz(light_dark_problem, x_range, y_range, 0.1)
+        if plotting:
+            x_range = (-1, 6)
+            y_range = (-1, 6)
+            viz = LightDarkViz(light_dark_problem, x_range, y_range, 0.1)
 
         # planning
         print("==== Planning ====")
@@ -651,8 +662,9 @@ def main():
                 # print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
 
-                # viz.log_state(light_dark_problem.env.state)
-                # viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
+                if plotting:
+                    viz.log_state(light_dark_problem.env.state)
+                    viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
 
             print("==== Step %d ====" % (i+1))
 
@@ -670,7 +682,10 @@ def main():
 
             check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
             # |TODO| can move before update to avoid confusion state case and belief case?
-            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, next_state)
+            # By belief state
+            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)
+            # # By true state
+            # reward = light_dark_problem.env.reward_model.sample(next_state, best_action, next_state)
             total_reward = reward + discont_factor*total_reward
 
             print("Action: %s" % str(best_action))
@@ -683,7 +698,14 @@ def main():
             print("Reward: %s" % str(reward))
             print("Num sims: %d" % sims_count)
             print("Plan time: %.5f" % time_taken)
-                
+            
+            if plotting:
+                # viz.set_initial_belief_pos(b_0[0])
+                # viz.log_position(tuple(b_0[0]), path=0)
+                # viz.log_position(tuple(b_0[0]), path=1)
+                viz.log_state(light_dark_problem.env.state)
+                viz.log_belief(light_dark_problem.agent.cur_belief)
+                viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
 
             if check_goal:
                 print("\n")
@@ -714,31 +736,19 @@ def main():
                 #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
             
 
-        #     # viz.set_initial_belief_pos(b_0[0])
-        #     # viz.log_position(tuple(b_0[0]), path=0)
-        #     # viz.log_position(tuple(b_0[0]), path=1)
-        #     viz.log_state(light_dark_problem.env.state)
-        #     viz.log_belief(light_dark_problem.agent.cur_belief)
-        #     viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
-
-        # # for m_i, _, _ in plan:
-        # #     viz.log_position(tuple(m_i), path=0)
-
-        # viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
-        #                         1: [(0,0,0), (255,0,0)]},
-        #             path_styles={0: "--",
-        #                         1: "-"},
-        #             path_widths={0: 4,
-        #                         1: 1})
-        # plt.show()
+        if plotting:
+            viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
+                                    1: [(0,0,0), (255,0,0)]},
+                        path_styles={0: "--",
+                                    1: "-"},
+                        path_widths={0: 4,
+                                    1: 1})
+            plt.show()
     
     print("====Finish===")
     print("num_sucess: %d" % num_sucess)
     print("num_fail: %d" % num_fail)
-    
-    
-
-
+      
 
 if __name__ == '__main__':
     main()
