@@ -92,7 +92,17 @@ class POMCPOW(Planner):
                 self.log_path = []
                 self.log_path.append(state.position)
         
+
+            ################################################################
+            print(f"=============Start Simulation: {sims_count}=================")
+            print("call _simulate()")
+            ################################################################
+
             total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging)
+
+            ################################################################
+            print(f"=============End Simulation: {sims_count}=================")
+            ################################################################
         
             if logging:
                 self.log[str(sims_count)] = (self.log_path, total_reward)
@@ -113,9 +123,9 @@ class POMCPOW(Planner):
         self._agent.tree.value = self._agent.tree[best_action].value
 
         if logging:
-            with open('simulation_log.pickle', 'wb') as f:
+            with open('simulation_log_debug.pickle', 'wb') as f:
                 pickle.dump(self.log, f)
-            with open('simulation_tree.pickle', 'wb') as f:
+            with open('simulation_tree_debug.pickle', 'wb') as f:
                 log_value = {}
                 for key in self._agent.tree.children.keys():
                     log_value[key] = self._agent.tree.children[key].value
@@ -139,6 +149,13 @@ class POMCPOW(Planner):
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
+        
+        ################################################################
+        num_q = len(_history.children)
+        print(f"#Q children: {num_q}")
+        print("call _ucb()")
+        ################################################################
+
         return self._ucb(vnode)
 
     def _simulate(self, state, history, root, parent, observation, depth, logging, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
@@ -157,8 +174,22 @@ class POMCPOW(Planner):
             if parent is not None:
                 parent[observation] = root
 
+        ################################################################
+        print(f"depth: {depth}")
+        print("call _ActionProgWiden()")
+        ################################################################
+
         action = self._ActionProgWiden(vnode=root, history=history, state=state)
+
+        ################################################################
+        print(f"return _ucb() & _ActionProgWiden(): action {action}")
+        ################################################################
+
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
+
+        ################################################################
+        print(f"next_state: {next_state}, reward: {reward}")
+        ################################################################
 
         if logging:
             self.log_path.append(next_state.position)
@@ -171,6 +202,11 @@ class POMCPOW(Planner):
             # |FIXME| o <- selet w.p. M(hao)/SIGMA_o M(hao)
             observation = random.choice(list(root[action].children.keys()))
 
+            ################################################################
+            num_v = len(root[action].children)
+            print(f"#V children is full: {num_v}")
+            ################################################################
+
         history += ((action, observation), )
 
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, next_state, action)
@@ -181,8 +217,28 @@ class POMCPOW(Planner):
             root[action][observation] = self._VNode(agent=self._agent, root=False)
             root[action][observation].belief[next_state] = prob
 
+            # |NOTE| if new observation node already achieve goal condition, then return simulate() without calling rollout()
+            if self._pomdp.env.reward_model.is_goal_state(next_state):
+                total_reward = reward
+        
+                root.num_visits += 1
+                root[action].num_visits += 1
+                root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
+
+                ################################################################
+                print("!!!!!!!Goal!!!!!!")
+                print(f"return _simulate(), don't call _rollout(), total_reward: {total_reward}")
+                ################################################################
+
+                return total_reward
+
+            ################################################################
+            print("new VNode")
+            print("call _rollout()")
+            ################################################################
+
             total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging)
-            
+
         else:
             # |NOTE| append s` to B(hao)
             # |NOTE| append Z(o|s,a,s`) to W(hao)
@@ -197,9 +253,28 @@ class POMCPOW(Planner):
             # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
 
+            ################################################################
+            print(f"sampling new reward, because observation is change: {reward}")
+            ################################################################
+
             # |NOTE| check goal condition while simulating 
             if self._pomdp.env.reward_model.is_goal_state(next_state):
-                depth = self._max_depth
+                total_reward = reward
+        
+                root.num_visits += 1
+                root[action].num_visits += 1
+                root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
+
+                ################################################################
+                print("!!!!!!!Goal!!!!!!")
+                print(f"return _simulate(), total_reward: {total_reward}")
+                ################################################################
+
+                return total_reward
+
+            ################################################################
+            print(f"call nested _simulate(), depth: {depth}")
+            ################################################################
 
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
                                                                             history,
@@ -209,10 +284,21 @@ class POMCPOW(Planner):
                                                                             depth+nsteps,
                                                                             logging=logging)
         
+            ################################################################
+            print("return nested _simulate()")
+            ################################################################
+
+        if total_reward > 100:
+            pdb.set_trace()
+
         # |TODO| agent.tree->Q->V check
         root.num_visits += 1
         root[action].num_visits += 1
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
+
+        ################################################################
+        print(f"return _simulate(), total_reward: {total_reward}")
+        ################################################################
 
         return total_reward
 
@@ -237,6 +323,11 @@ class POMCPOW(Planner):
                 discount *= (self._discount_factor**nsteps)
                 state = next_state
 
+                ################################################################
+                print("!!!!!!!Goal!!!!!!")
+                print(f"return _rollout(), rollout_reward: {total_discounted_reward}")
+                ################################################################
+
                 return total_discounted_reward
 
             else:
@@ -245,6 +336,11 @@ class POMCPOW(Planner):
             total_discounted_reward += reward * discount
             discount *= (self._discount_factor**nsteps)
             state = next_state
+
+        ################################################################
+        print(f"return _rollout(), depth: {depth}")
+        print(f"rollout_reward: {total_discounted_reward}")
+        ################################################################
 
         return total_discounted_reward
 
@@ -257,9 +353,11 @@ class POMCPOW(Planner):
             else:
                 val = root[action].value + \
                     self._exploration_const * math.sqrt(math.log(root.num_visits + 1) / root[action].num_visits)
+                    
             if val > best_value:
                 best_action = action
                 best_value = val
+
         return best_action
 
     def _sample_generative_model(self, state, action):

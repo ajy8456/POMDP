@@ -642,7 +642,7 @@ def main():
 
         # set planner
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
-                        discount_factor=discont_factor, exploration_const=20,
+                        discount_factor=discont_factor, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
         # Visualization setting
@@ -689,6 +689,11 @@ def main():
             reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)
             # # By true state
             # reward = light_dark_problem.env.reward_model.sample(next_state, best_action, next_state)
+
+            # |NOTE| only take positive reward as achieving goal condition
+            if not check_goal:
+                reward = -1
+
             total_reward = reward + discont_factor*total_reward
 
             print("Action: %s" % str(best_action))
