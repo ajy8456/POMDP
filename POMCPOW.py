@@ -9,6 +9,8 @@ import math
 import pickle
 import numpy as np
 
+import pdb
+
 
 class POMCPOW(Planner):
     def __init__(self, pomdp,
@@ -84,19 +86,6 @@ class POMCPOW(Planner):
         start_time = time.time()
 
         while True:
-            # # initial belief state is gaussian
-            # if horizon == 0:
-            #     _init_belief = State(tuple(np.array([self._pomdp.env.init_state.position[0]+init_belief_variance*np.random.randn(), self._pomdp.env.init_state.position[1]+init_belief_variance*np.random.randn()])))
-            #     gaussian_noise = Gaussian([0,0],
-            #                               [[init_belief_variance, 0],
-            #                                [0, init_belief_variance]])
-            #     omega = (_init_belief.position[0] - self._pomdp.env.init_state.position[0],
-            #              _init_belief.position[1] - self._pomdp.env.init_state.position[1])
-            #     prob = gaussian_noise[omega]
-            #     self._agent._cur_belief[_init_belief] = prob 
-            #     state = _init_belief
-            # else:
-            #     state = self._agent.sample_belief()
             state = self._agent.sample_belief()
         
             if logging:
@@ -114,8 +103,10 @@ class POMCPOW(Planner):
                 break
             if self._num_sims > 0 and sims_count >= self._num_sims:
                 break
+
         if horizon == 0:
             self.history.append(self._agent._cur_belief.get_histogram())
+
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
@@ -124,6 +115,11 @@ class POMCPOW(Planner):
         if logging:
             with open('simulation_log.pickle', 'wb') as f:
                 pickle.dump(self.log, f)
+            with open('simulation_tree.pickle', 'wb') as f:
+                log_value = {}
+                for key in self._agent.tree.children.keys():
+                    log_value[key] = self._agent.tree.children[key].value
+                pickle.dump(log_value, f)
 
         return best_action, time_taken, sims_count
 
@@ -136,7 +132,7 @@ class POMCPOW(Planner):
         _action = (_action_x,_action_y)
         return _action
 
-    def _ActionProgWiden(self, vnode, history, state, k_a=10, alpha_a=1/10):
+    def _ActionProgWiden(self, vnode, history, state, k_a=2, alpha_a=1/2):
         _history = vnode
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             _action = self._NextAction(state)
@@ -145,7 +141,7 @@ class POMCPOW(Planner):
                 vnode[_action] = history_action_node
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, k_o=3, alpha_o=1/3): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
@@ -184,7 +180,9 @@ class POMCPOW(Planner):
             # |NOTE| append Z(o|s,a,s`) to W(hao)
             root[action][observation] = self._VNode(agent=self._agent, root=False)
             root[action][observation].belief[next_state] = prob
+
             total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging)
+            
         else:
             # |NOTE| append s` to B(hao)
             # |NOTE| append Z(o|s,a,s`) to W(hao)
@@ -202,6 +200,7 @@ class POMCPOW(Planner):
             # |NOTE| check goal condition while simulating 
             if self._pomdp.env.reward_model.is_goal_state(next_state):
                 depth = self._max_depth
+
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
                                                                             history,
                                                                             root[action][observation],
@@ -214,6 +213,7 @@ class POMCPOW(Planner):
         root.num_visits += 1
         root[action].num_visits += 1
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
+
         return total_reward
 
     def _rollout(self, state, history, root, depth, logging): # root<-class:VNode
@@ -231,12 +231,21 @@ class POMCPOW(Planner):
 
             # |NOTE| check goal condition while rollout
             if self._pomdp.env.reward_model.is_goal_state(next_state):
-                depth = self._max_depth
+                depth += nsteps
+
+                total_discounted_reward += reward * discount
+                discount *= (self._discount_factor**nsteps)
+                state = next_state
+
+                return total_discounted_reward
+
             else:
                 depth += nsteps
+
             total_discounted_reward += reward * discount
             discount *= (self._discount_factor**nsteps)
             state = next_state
+
         return total_discounted_reward
 
     def _ucb(self, root): # rood<-class:VNode
@@ -277,18 +286,18 @@ class POMCPOW(Planner):
                                       agent.history,
                                       belief=copy.deepcopy(agent.belief))
         else:
-            if agent is None:
-                return VNodeParticles(self._num_visits_init,
-                                      self._value_init,
-                                      belief=Histogram({}))
-                                    #   belief=Particles([]))
+            # if agent is None:
+            #     return VNodeParticles(self._num_visits_init,
+            #                           self._value_init,
+            #                           belief=Histogram({}))
+            #                         #   belief=Particles([]))
 
-            else:
-                return VNodeParticles(self._num_visits_init,
-                                      self._value_init,
-                                      belief=Histogram({}))
-                                    #   belief=copy.deepcopy(agent.belief))
-                                    #   belief=Particles([]))
+            # else:
+            return VNodeParticles(self._num_visits_init,
+                                    self._value_init,
+                                    belief=Histogram({}))
+                                #   belief=copy.deepcopy(agent.belief))
+                                #   belief=Particles([]))
 
     def update(self, agent, env, real_action, next_state, real_observation, state_transform_func=None):
         """

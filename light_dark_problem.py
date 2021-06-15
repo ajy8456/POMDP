@@ -235,7 +235,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon=0.2):
+    def __init__(self, light, goal_state, epsilon=0.25):
         self.light = light
         self._goal_state = goal_state
         self._epsilon=epsilon
@@ -280,7 +280,7 @@ class RewardModel(RewardModel):
         
     # For State
     def is_goal_state(self, state: State):
-        if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon:
+        if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon**2:
             return True
         return False
 
@@ -290,7 +290,7 @@ class RewardModel(RewardModel):
         prob_in_goal = 0
         normalized_hist = state.get_normalized()
         for particle in normalized_hist:
-            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon:
+            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
                 prob_in_goal += normalized_hist[particle]
         print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
         return prob_in_goal >= thres
@@ -498,7 +498,7 @@ class LightDarkViz:
         if self._goal_pos is not None:
             util.plot_circle(self._ax,
                              self._goal_pos,
-                             0.2,  # tentative
+                             0.25,  # tentative
                              linewidth=1, edgecolor="blue",
                              zorder=3)
     
@@ -587,22 +587,26 @@ class LightDarkViz:
 
 
 def main():
-    plotting = True
+    plotting = False
+    save_data = False
+    save_log = True
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 100
-    num_particles = 1000
-    random_range = 1
-    # save_dir = os.path.join(os.getcwd(),'./dataset_less_sim')
-    # if not os.path.exists(save_dir):
-    #     os.mkdir(save_dir)
+    num_planning = 1
+    num_particles = 10000
+    init_random_range = 0
+
+    if save_data:
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10000')
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
 
     for n in range(num_planning):
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================") 
-        init_state = State(tuple(2.5 + random_range * (np.random.rand(2) - 0.5)))
+        init_state = State(tuple(2.5 + init_random_range * (np.random.rand(2) - 0.5)))
         goal_state = State((0, 0))
 
         # inital belief state is uniformly distribution
@@ -614,7 +618,7 @@ def main():
         #     init_belief.append(sample)
             # init_belief[sample] = 1 / (random_range**2 * num_particles)
         # For gaussian initalization
-        init_belief_std = 0.2
+        init_belief_std = 0.25
         while len(init_belief) < num_particles:
             sample = State(tuple(np.asarray(init_state.position) + init_belief_std * (np.random.randn(2))))
             init_belief.append(sample)
@@ -638,7 +642,7 @@ def main():
 
         # set planner
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
-                        discount_factor=discont_factor, exploration_const=math.sqrt(2),
+                        discount_factor=discont_factor, exploration_const=20,
                         num_visits_init=0, value_init=0)
 
         # Visualization setting
@@ -653,9 +657,8 @@ def main():
         total_num_sims = 0
         total_plan_time = 0.0
         for i in range(planning_horizon):
-            logging = False
+            logging = save_log and i==0
             if i == 0:
-                logging = True
                 print("Goal state: %s" % goal_state)
                 print("Inital state: %s" % light_dark_problem.env.state)
                 print("Inital belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
@@ -715,11 +718,13 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
-                # # save data
-                # with open(os.path.join(save_dir,'data_sucess_history.pickle'), 'ab') as f:
-                #     pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                # with open(os.path.join(save_dir,'data_sucess_value.pickle'), 'ab') as f:
-                #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                
+                # save data
+                if save_data:
+                    with open(os.path.join(save_dir,'success_history.pickle'), 'ab') as f:
+                        pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                    with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
+                        pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
                 break
 
             elif i == planning_horizon-1:
@@ -729,11 +734,13 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
-                # # save data
-                # with open(os.path.join(save_dir,'data_fail_history.pickle'), 'ab') as f:
-                #     pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                # with open(os.path.join(save_dir,'data_fail_value.pickle'), 'ab') as f:
-                #     pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+
+                # save data
+                if save_data:
+                    with open(os.path.join(save_dir,'fail_history.pickle'), 'ab') as f:
+                        pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                    with open(os.path.join(save_dir,'fail_value.pickle'), 'ab') as f:
+                        pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
             
 
         if plotting:
@@ -745,9 +752,12 @@ def main():
                                     1: 1})
             plt.show()
     
+        print("num_sucess: %d" % num_sucess)
+        print("num_fail: %d" % num_fail)
+
     print("====Finish===")
-    print("num_sucess: %d" % num_sucess)
-    print("num_fail: %d" % num_fail)
+    print("total_num_sucess: %d" % num_sucess)
+    print("total_num_fail: %d" % num_fail)
       
 
 if __name__ == '__main__':
