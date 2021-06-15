@@ -588,17 +588,17 @@ class LightDarkViz:
 
 def main():
     plotting = False
-    save_data = False
-    save_log = True
+    save_data = True
+    save_log = False
 
     num_sucess = 0
     num_fail = 0
     num_planning = 1
-    num_particles = 10000
+    num_particles = 1000000
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10000')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim1M')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -671,7 +671,7 @@ def main():
 
             print("==== Step %d ====" % (i+1))
 
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging)
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging, save_data)
 
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
@@ -724,12 +724,18 @@ def main():
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
                 
-                # save data
+                # # save data
+                # if save_data:
+                #     with open(os.path.join(save_dir,'success_history.pickle'), 'ab') as f:
+                #         pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                #     with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
+                #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                
+                # Saving success history
                 if save_data:
-                    with open(os.path.join(save_dir,'success_history.pickle'), 'ab') as f:
-                        pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                    with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
-                        pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
+                        pickle.dump(planner.history_data, f)
+                
                 break
 
             elif i == planning_horizon-1:

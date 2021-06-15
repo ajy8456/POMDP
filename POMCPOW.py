@@ -48,12 +48,12 @@ class POMCPOW(Planner):
 
         # self.history = tuple(pomdp.agent._init_belief)
         # self.history.append(list(list(pomdp.agent._init_belief.histogram.keys())[0].position))
-        self.history = []
 
         # For logging simulation result
         # dict: {key: str(sims_count), value: Tuple(log_path: list[np.array], total_reward: float)}
         self.log = {}
         self.path = None
+        self.history_data = []
 
 
     @property
@@ -71,7 +71,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon, logging = False):
+    def plan(self, agent, horizon, logging=False, save_data=False):
         # Only works if the agent's belief is particles
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -93,16 +93,16 @@ class POMCPOW(Planner):
                 self.log_path.append(state.position)
         
 
-            ################################################################
-            print(f"=============Start Simulation: {sims_count}=================")
-            print("call _simulate()")
-            ################################################################
+            # ################################################################
+            # print(f"=============Start Simulation: {sims_count}=================")
+            # print("call _simulate()")
+            # ################################################################
 
-            total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging)
+            total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
 
-            ################################################################
-            print(f"=============End Simulation: {sims_count}=================")
-            ################################################################
+            # ################################################################
+            # print(f"=============End Simulation: {sims_count}=================")
+            # ################################################################
         
             if logging:
                 self.log[str(sims_count)] = (self.log_path, total_reward)
@@ -114,18 +114,17 @@ class POMCPOW(Planner):
             if self._num_sims > 0 and sims_count >= self._num_sims:
                 break
 
-        if horizon == 0:
-            self.history.append(self._agent._cur_belief.get_histogram())
 
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
         self._agent.tree.value = self._agent.tree[best_action].value
 
+        # logging first planning's path, QNode
         if logging:
-            with open('simulation_log_debug.pickle', 'wb') as f:
+            with open('simulation_log_.pickle', 'wb') as f:
                 pickle.dump(self.log, f)
-            with open('simulation_tree_debug.pickle', 'wb') as f:
+            with open('simulation_tree_debug_.pickle', 'wb') as f:
                 log_value = {}
                 for key in self._agent.tree.children.keys():
                     log_value[key] = self._agent.tree.children[key].value
@@ -150,15 +149,15 @@ class POMCPOW(Planner):
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
         
-        ################################################################
-        num_q = len(_history.children)
-        print(f"#Q children: {num_q}")
-        print("call _ucb()")
-        ################################################################
+        # ################################################################
+        # num_q = len(_history.children)
+        # print(f"#Q children: {num_q}")
+        # print("call _ucb()")
+        # ################################################################
 
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, save_data, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
@@ -174,22 +173,22 @@ class POMCPOW(Planner):
             if parent is not None:
                 parent[observation] = root
 
-        ################################################################
-        print(f"depth: {depth}")
-        print("call _ActionProgWiden()")
-        ################################################################
+        # ################################################################
+        # print(f"depth: {depth}")
+        # print("call _ActionProgWiden()")
+        # ################################################################
 
         action = self._ActionProgWiden(vnode=root, history=history, state=state)
 
-        ################################################################
-        print(f"return _ucb() & _ActionProgWiden(): action {action}")
-        ################################################################
+        # ################################################################
+        # print(f"return _ucb() & _ActionProgWiden(): action {action}")
+        # ################################################################
 
         next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
-        ################################################################
-        print(f"next_state: {next_state}, reward: {reward}")
-        ################################################################
+        # ################################################################
+        # print(f"next_state: {next_state}, reward: {reward}")
+        # ################################################################
 
         if logging:
             self.log_path.append(next_state.position)
@@ -202,12 +201,12 @@ class POMCPOW(Planner):
             # |FIXME| o <- selet w.p. M(hao)/SIGMA_o M(hao)
             observation = random.choice(list(root[action].children.keys()))
 
-            ################################################################
-            num_v = len(root[action].children)
-            print(f"#V children is full: {num_v}")
-            ################################################################
+            # ################################################################
+            # num_v = len(root[action].children)
+            # print(f"#V children is full: {num_v}")
+            # ################################################################
 
-        history += ((action, observation), )
+        history += ((action, observation.position), )
 
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, next_state, action)
 
@@ -225,19 +224,23 @@ class POMCPOW(Planner):
                 root[action].num_visits += 1
                 root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
 
-                ################################################################
-                print("!!!!!!!Goal!!!!!!")
-                print(f"return _simulate(), don't call _rollout(), total_reward: {total_reward}")
-                ################################################################
+                # ################################################################
+                # print("!!!!!!!Goal!!!!!!")
+                # print(f"return _simulate(), don't call _rollout(), total_reward: {total_reward}")
+                # ################################################################
+
+                # Saving success history
+                if save_data:
+                    self.history_data.append(history)
 
                 return total_reward
 
-            ################################################################
-            print("new VNode")
-            print("call _rollout()")
-            ################################################################
+            # ################################################################
+            # print("new VNode")
+            # print("call _rollout()")
+            # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data)
 
         else:
             # |NOTE| append s` to B(hao)
@@ -253,9 +256,9 @@ class POMCPOW(Planner):
             # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
 
-            ################################################################
-            print(f"sampling new reward, because observation is change: {reward}")
-            ################################################################
+            # ################################################################
+            # print(f"sampling new reward, because observation is change: {reward}")
+            # ################################################################
 
             # |NOTE| check goal condition while simulating 
             if self._pomdp.env.reward_model.is_goal_state(next_state):
@@ -265,16 +268,20 @@ class POMCPOW(Planner):
                 root[action].num_visits += 1
                 root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
 
-                ################################################################
-                print("!!!!!!!Goal!!!!!!")
-                print(f"return _simulate(), total_reward: {total_reward}")
-                ################################################################
+                # ################################################################
+                # print("!!!!!!!Goal!!!!!!")
+                # print(f"return _simulate(), total_reward: {total_reward}")
+                # ################################################################
+
+                # Saving success history
+                if save_data:
+                    self.history_data.append(history)
 
                 return total_reward
 
-            ################################################################
-            print(f"call nested _simulate(), depth: {depth}")
-            ################################################################
+            # ################################################################
+            # print(f"call nested _simulate(), depth: {depth}")
+            # ################################################################
 
             total_reward = reward + (self._discount_factor**nsteps)*self._simulate(next_state,
                                                                             history,
@@ -282,27 +289,28 @@ class POMCPOW(Planner):
                                                                             root[action],
                                                                             observation,
                                                                             depth+nsteps,
-                                                                            logging=logging)
+                                                                            logging=logging,
+                                                                            save_data=save_data)
         
-            ################################################################
-            print("return nested _simulate()")
-            ################################################################
+            # ################################################################
+            # print("return nested _simulate()")
+            # ################################################################
 
-        if total_reward > 100:
-            pdb.set_trace()
+        # if total_reward > 100:
+        #     pdb.set_trace()
 
         # |TODO| agent.tree->Q->V check
         root.num_visits += 1
         root[action].num_visits += 1
         root[action].value = root[action].value + (total_reward - root[action].value) / (root[action].num_visits)
 
-        ################################################################
-        print(f"return _simulate(), total_reward: {total_reward}")
-        ################################################################
+        # ################################################################
+        # print(f"return _simulate(), total_reward: {total_reward}")
+        # ################################################################
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, save_data): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
 
@@ -313,7 +321,7 @@ class POMCPOW(Planner):
             if logging:
                 self.log_path.append(next_state.position)
 
-            history = history + ((action, observation),)
+            history = history + ((action, observation.position),)
 
             # |NOTE| check goal condition while rollout
             if self._pomdp.env.reward_model.is_goal_state(next_state):
@@ -323,10 +331,14 @@ class POMCPOW(Planner):
                 discount *= (self._discount_factor**nsteps)
                 state = next_state
 
-                ################################################################
-                print("!!!!!!!Goal!!!!!!")
-                print(f"return _rollout(), rollout_reward: {total_discounted_reward}")
-                ################################################################
+                # ################################################################
+                # print("!!!!!!!Goal!!!!!!")
+                # print(f"return _rollout(), rollout_reward: {total_discounted_reward}")
+                # ################################################################
+
+                # Saving success history
+                if save_data:
+                    self.history_data.append(history)
 
                 return total_discounted_reward
 
@@ -337,10 +349,10 @@ class POMCPOW(Planner):
             discount *= (self._discount_factor**nsteps)
             state = next_state
 
-        ################################################################
-        print(f"return _rollout(), depth: {depth}")
-        print(f"rollout_reward: {total_discounted_reward}")
-        ################################################################
+        # ################################################################
+        # print(f"return _rollout(), depth: {depth}")
+        # print(f"rollout_reward: {total_discounted_reward}")
+        # ################################################################
 
         return total_discounted_reward
 
@@ -411,15 +423,14 @@ class POMCPOW(Planner):
             print("Warning: agent does not have tree. Have you planned yet?")
             return
         
+        # Update history
+        agent.update_history(real_action, real_observation.position)
+
         # |FIXME| create new root node
         if agent.tree[real_action][real_observation] is None:
             # # Never anticipated the real_observation. No reinvigoration can happen.
             # raise ValueError("Particle deprivation.")
-            agent.tree[real_action][real_observation] = self._VNode(agent=agent, root=False)
-
-        # Update history
-        self.history.append(list(real_action))
-        self.history.append(list(real_observation.position))
+            agent.tree[real_action][real_observation] = self._VNode(agent=agent, root=True)
 
         # Update the state
         env.apply_transition(next_state)
