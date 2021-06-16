@@ -124,7 +124,7 @@ class POMCPOW(Planner):
         if logging:
             with open('simulation_log_.pickle', 'wb') as f:
                 pickle.dump(self.log, f)
-            with open('simulation_tree_debug_.pickle', 'wb') as f:
+            with open('simulation_tree_.pickle', 'wb') as f:
                 log_value = {}
                 for key in self._agent.tree.children.keys():
                     log_value[key] = self._agent.tree.children[key].value
@@ -173,6 +173,10 @@ class POMCPOW(Planner):
             if parent is not None:
                 parent[observation] = root
 
+        # sampling inital observation according to zero-action
+        init_observation = self._agent._observation_model.sample(state, (0,0))
+        history += ((init_observation.position), )
+        
         # ################################################################
         # print(f"depth: {depth}")
         # print("call _ActionProgWiden()")

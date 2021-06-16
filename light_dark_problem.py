@@ -593,12 +593,12 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
-    num_particles = 1000000
+    num_planning = 50
+    num_particles = 10000
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim1M')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10K_2')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -733,7 +733,7 @@ def main():
                 
                 # Saving success history
                 if save_data:
-                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
+                    with open(os.path.join(save_dir, 'simulation_history_data_success.pickle'), 'ab') as f:
                         pickle.dump(planner.history_data, f)
                 
                 break
@@ -746,12 +746,17 @@ def main():
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
 
-                # save data
+                # # save data
+                # if save_data:
+                #     with open(os.path.join(save_dir,'fail_history.pickle'), 'ab') as f:
+                #         pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                #     with open(os.path.join(save_dir,'fail_value.pickle'), 'ab') as f:
+                #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+
+                # Saving fail history
                 if save_data:
-                    with open(os.path.join(save_dir,'fail_history.pickle'), 'ab') as f:
-                        pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                    with open(os.path.join(save_dir,'fail_value.pickle'), 'ab') as f:
-                        pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                    with open(os.path.join(save_dir, 'simulation_history_data_fail.pickle'), 'ab') as f:
+                        pickle.dump(planner.history_data, f)
             
 
         if plotting:
