@@ -175,7 +175,7 @@ class POMCPOW(Planner):
 
         # sampling inital observation according to zero-action
         init_observation = self._agent._observation_model.sample(state, (0,0))
-        history += ((init_observation.position), )
+        history += (((0,0), init_observation.position, state.position, 0), )
         
         # ################################################################
         # print(f"depth: {depth}")
@@ -210,7 +210,7 @@ class POMCPOW(Planner):
             # print(f"#V children is full: {num_v}")
             # ################################################################
 
-        history += ((action, observation.position), )
+        history += ((action, observation.position, next_state.position, reward), )
 
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, next_state, action)
 
@@ -325,7 +325,7 @@ class POMCPOW(Planner):
             if logging:
                 self.log_path.append(next_state.position)
 
-            history = history + ((action, observation.position),)
+            history += ((action, observation.position, next_state.position, reward), )
 
             # |NOTE| check goal condition while rollout
             if self._pomdp.env.reward_model.is_goal_state(next_state):
