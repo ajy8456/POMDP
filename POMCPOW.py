@@ -98,7 +98,12 @@ class POMCPOW(Planner):
             # print("call _simulate()")
             # ################################################################
 
+            # remember excuted history
             total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
+            # don't remember excuted history
+            empty_history = ()
+            total_reward = self._simulate(state, empty_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
+
 
             # ################################################################
             # print(f"=============End Simulation: {sims_count}=================")

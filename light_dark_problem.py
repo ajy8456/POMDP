@@ -598,7 +598,7 @@ def main():
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10K')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10K_5')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
