@@ -98,11 +98,16 @@ class POMCPOW(Planner):
             # print("call _simulate()")
             # ################################################################
 
-            # remember excuted history
-            total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
+            # # remember excuted history
+            # total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
             # don't remember excuted history
-            empty_history = ()
-            total_reward = self._simulate(state, empty_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
+            simulate_history = ()
+            
+            # sampling inital observation according to zero-action
+            init_observation = self._agent._observation_model.sample(state, (0,0))
+            simulate_history += (((0,0), init_observation.position, state.position, 0), )
+
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
 
 
             # ################################################################
@@ -177,10 +182,6 @@ class POMCPOW(Planner):
 
             if parent is not None:
                 parent[observation] = root
-
-        # sampling inital observation according to zero-action
-        init_observation = self._agent._observation_model.sample(state, (0,0))
-        history += (((0,0), init_observation.position, state.position, 0), )
         
         # ################################################################
         # print(f"depth: {depth}")

@@ -593,12 +593,12 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 20
-    num_particles = 10000
+    num_planning = 5
+    num_particles = 100
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim10K_5')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim100')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
