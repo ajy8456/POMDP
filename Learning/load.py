@@ -5,12 +5,14 @@ import torch as th
 from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
 from torch.utils.data import Dataset, DataLoader, Sampler
 
+from run import Settings
+
 
 class LightDarkDataset(Dataset):
     """
     Get a train/test dataset according to the specified settings.
     """
-    def __init__(self, opt: Settings, dataset: Dict, transform=None):
+    def __init__(self, config: Settings, dataset: Dict, transform=None):
         self.dataset = dataset
 
     def __len__(self):
@@ -49,15 +51,15 @@ class TimeStepSampler(Sampler):
         yield index
 
 
-def get_batch(opt, data):
-    batch_size = opt.batch_size
-    device = opt.device
-    max_len = opt.max_len
-    seq_len = opt.seq_len
-    dim_observation = opt.dim_observation
-    dim_action = opt.dim_action
-    dim_state = opt.dim_state
-    dim_reward = opt.dim_reward
+def get_batch(config, data):
+    batch_size = config.batch_size
+    device = config.device
+    max_len = config.max_len
+    seq_len = config.seq_len
+    dim_observation = config.dim_observation
+    dim_action = config.dim_action
+    dim_state = config.dim_state
+    dim_reward = config.dim_reward
 
     o, a, r, next_s, timesteps, mask = [], [], [], [], [], [], []
     for traj in data:
@@ -69,7 +71,7 @@ def get_batch(opt, data):
         r.append(traj['reward'][i:i + seq_len].reshape(1, -1, dim_reward))
         next_s.append(traj['next_state'][i:i + seq_len].reshape(1, -1, dim_state))
         timesteps.append(np.arange(i, i + o[-1].shape[1]).reshape(1, -1))
-        timesteps[-1][timesteps[-1] >= max_ep_len] = max_len - 1  # padding cutoff
+        timesteps[-1][timesteps[-1] >= max_len] = max_len - 1  # padding cutoff
 
         # padding
         # |FIXME| check padded value & need normalization?
@@ -96,11 +98,11 @@ def get_batch(opt, data):
 
     return out
 
-def get_loader(opt: Settings, dataset: Dict,
+def get_loader(config: Settings, dataset: Dict,
                transform=None, collate_fn=get_batch):
-    dataset = LightDarkDataset(opt, dataset, transform, collate_fn)
+    dataset = LightDarkDataset(config, dataset, transform, collate_fn)
     loader = DataLoader(dataset,
-                        batch_size=opt.batch_size,
-                        shuffle=opt.shuffle,
+                        batch_size=config.batch_size,
+                        shuffle=config.shuffle,
                         collate_fn=collate_fn)
     return loader

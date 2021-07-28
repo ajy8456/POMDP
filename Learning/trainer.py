@@ -10,7 +10,7 @@ class Trainer(object):
     """
 
     def __init__(self,
-                 opt: Settings,
+                 config: Settings,
                  loader: th.utils.data.DataLoader,
                  model: th.nn.Module,
                  optimizer: th.optim.Optimizer,
@@ -19,13 +19,13 @@ class Trainer(object):
                  ):
         """
         Args:
-            opts: Trainer options.
+            config: Trainer options.
             model: The model to train.
             optimizer: Optimizer, e.g. `Adam`.
             loss_fn: The function that maps (model, next(iter(loader))) -> cost.
             loader: Iterable data loader.
         """
-        self.opt = opt
+        self.config = config
         self.loader = loader
         self.model = model
         self.optim = optimizer
@@ -35,9 +35,10 @@ class Trainer(object):
     def _train(self):
         """Internal function for dealing with the inner training loop."""
         step = 0
-        for epoch in range(self.opt.epochs):
+        for epoch in range(self.config.epochs):
             for i, data in enumerate(self.loader):
                 observations, actions, attn_mask = data['observations'], data['actions'], data['mask']
+                # |FIXME|
                 target_actions = th.clone(actions)
 
                 pred_actions = self.model(observations, actions, attn_mask)
@@ -54,7 +55,7 @@ class Trainer(object):
                 # self.hub.publish(Topic.STEP, step)
                 step += 1
 
-                if step >= self.opts.train_steps:
+                if step >= self.config.train_steps:
                     return
 
     def train(self):

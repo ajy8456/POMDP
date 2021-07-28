@@ -4,10 +4,10 @@ import torch.nn.functional as F
 
 
 class Value(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(Value, self).__init__()
-        self.dim_embed = opt.dim_embed
-        self.dim_hidden = opt.dim_hidden
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
 
         self.fc1 = nn.Linear(self.dim_embed, self.dim_hidden, bias = False)
     
@@ -16,10 +16,10 @@ class Value(nn.Module):
         return x
 
 class Key(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(Key, self).__init__()
-        self.dim_embed = opt.dim_embed
-        self.dim_hidden = opt.dim_hidden
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
 
         self.fc1 = nn.Linear(self.dim_embed, self.dim_hidden, bias = False)
        
@@ -28,10 +28,10 @@ class Key(nn.Module):
         return x
 
 class Query(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(Query, self).__init__()
-        self.dim_embed = opt.dim_embed
-        self.dim_hidden = opt.dim_hidden
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
 
         self.fc1 = nn.Linear(self.dim_embed, self.dim_hidden, bias = False)
     
@@ -42,10 +42,10 @@ class Query(nn.Module):
 
 # https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 class PositionalEncoding(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(PositionalEncoding, self).__init__()
-        self.max_len = opt.max_len
-        self.dim_embed = opt.dim_embed
+        self.max_len = config.max_len
+        self.dim_embed = config.dim_embed
 
         pe = th.zeros(self.max_len, self.dim_embed)
         position = th.arange(0, self.max_len, dtype=th.float).unsqueeze(1)
@@ -65,7 +65,7 @@ class PositionalEncoding(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(Attention, self).__init__()
     
     def forward(self, Q, K, V, attn_mask=None):
@@ -84,20 +84,20 @@ class Attention(nn.Module):
         return attn_v, attn_p
     
 
-class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, opt):
+class MultiHeadAttention(th.nn.Module):
+    def __init__(self, config):
         super(MultiHeadAttention, self).__init__()
-        self.batch_size = opt.batch_size
-        self.dim_hidden = opt.dim_hidden
-        self.dim_head = opt.dim_head
-        self.num_heads = opt.num_heads
+        self.batch_size = config.batch_size
+        self.dim_hidden = config.dim_hidden
+        self.dim_head = config.dim_head
+        self.num_heads = config.num_heads
 
         self.W_Q = Query(self.dim_hidden, self.dim_head * self.num_heads)
         self.W_K = Key(self.dim_hidden, self.dim_head * self.num_heads)
         self.W_V = Value(self.dim_hidden, self.dim_head * self.num_heads)
-        self.scaled_dot_attn = Attention(opt)
+        self.scaled_dot_attn = Attention(config)
         self.fc1 = nn.Linear(self.dim_head * self.num_heads, self.dim_hidden)
-        self.dropout = nn.Dropout(opt.dropout)
+        self.dropout = nn.Dropout(config.dropout)
     
     def forward(self, Q, K, V, attn_mask=None):
         # (batch_size, num_heads, num_q_seq, dim_head)
@@ -126,14 +126,14 @@ class MultiHeadAttention(torch.nn.Module):
     
 
 class FeedForwardNetwork(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super().__init__()
-        self.dim_hidden = opt.dim_hidden
-        self.dim_ffn = opt.dim_ffn
+        self.dim_hidden = config.dim_hidden
+        self.dim_ffn = config.dim_ffn
 
         self.conv1 = nn.Conv1d(in_channels=self.dim_hidden, out_channels=self.dim_ffn, kernel_size=1)
         self.conv2 = nn.Conv1d(in_channels=self.dim_ffn, out_channels=self.dim_hidden, kernel_size=1)
-        # |TODO| How to change by opt?
+        # |TODO| How to change by config?
         self.act_fn = F.gelu # original: ReLU
 
     def forward(self, inputs):
@@ -146,14 +146,14 @@ class FeedForwardNetwork(nn.Module):
 
 
 class GPT2DecoderLayer(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super(GPT2DecoderLayer, self).__init__()
-        self.opt = opt
+        self.config = config
 
-        self.self_attn = MultiHeadAttention(self.opt)
-        self.layer_norm1 = nn.LayerNorm(self.opt.dim_hidden)
+        self.self_attn = MultiHeadAttention(self.config)
+        self.layer_norm1 = nn.LayerNorm(self.config.dim_hidden)
         self.ffn = FeedForwardNetwork(self.config)
-        self.layer_norm2 = nn.LayerNorm(self.opt.dim_hidden)
+        self.layer_norm2 = nn.LayerNorm(self.config.dim_hidden)
     
     def forward(self, x, attn_mask):
                 # (batch_size, num_dec_seq, dim_hidden), (batch_size, num_heads, num_dec_seq, num_dec_seq)
@@ -168,22 +168,22 @@ class GPT2DecoderLayer(nn.Module):
 
 
 class GPT2(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, config):
         super().__init__()
-        self.opt = opt
-        self.dim_observation = opt.dim_observation
-        self.dim_action = opt.dim_action
-        self.dim_embed = opt.dim_embed
-        self.dim_hidden = opt.dim_hidden
-        self.num_layers = opt.num_layers
-        self.action_tanh = opt.action_tanh
+        self.config = config
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
+        self.num_layers = config.num_layers
+        self.action_tanh = config.action_tanh
 
         self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
         self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
         self.pos_embed = PositionalEncoding(self.dim_embed)
-        self.ln = nn.LayerNorm(dim_hidden)
+        self.ln = nn.LayerNorm(self.dim_hidden)
 
-        self.layers = nn.ModuleList([GPT2DecoderLayer(self.opt) for _ in range(self.num_layers)])
+        self.layers = nn.ModuleList([GPT2DecoderLayer(self.config) for _ in range(self.num_layers)])
     
         self.predict_action = nn.Sequential(*([nn.Linear(self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 

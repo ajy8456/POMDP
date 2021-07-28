@@ -41,29 +41,34 @@ class Settings(Serializable):
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = int(100)
 
+def main():
+    config = Settings()
+    # |TODO| go to Setting()
+    train_filename = 'light_dark_train.pickle'
+    test_filename = 'light_dark_test.pickle'
+    dataset_path = os.path.join(os.getcwd(), config.path)
 
-opt = Settings()
-# |TODO| go to Setting()
-train_filename = 'light_dark_train.pickle'
-test_filename = 'light_dark_test.pickle'
-dataset_path = os.path.join(os.getcwd(), opt.path)
+    with open(os.path.join(dataset_path, train_filename), 'rb') as f:
+        train_dataset = pickle.load(f)
+    with open(os.path.join(dataset_path, test_filename), 'rb') as f:
+        test_dataset = pickle.load(f)
 
-with open(os.path.join(dataset_path, train_filename), 'rb') as f:
-    train_dataset = pickle.load(f)
-with open(os.path.join(dataset_path, test_filename), 'rb') as f:
-    test_dataset = pickle.load(f)
+    # generate dataloader
+    train_loader = get_loader(config, train_dataset)
+    test_loader = get_loader(config, test_dataset)
 
-# append trajectory length to dataset
-train_traj_lens = []
-for traj in train_dataset:
-    train_traj_lens.append(len(traj['observation']))
-train_dataset['traj_lens'] = train_traj_lens
+    # model
+    model = GPT2(config)
+    optimizer = th.optim.Adam(model.parameters(), lr=1e-5)
 
-test_traj_lens = []
-for traj in test_dataset:
-    test_traj_lens.append(len(traj['observation']))
-test_dataset['traj_lens'] = test_traj_lens
+    # Trainer
+    trainer = Trainer(config=config,
+                    loader=train_loader,
+                    model=model,
+                    optimizer=optimizer,
+                    loss_fn=loss_fn,
+                    eval_fn=eval_fn)
+    trainer.train()
 
-# generate dataloader
-train_loader = get_loader(opt, train_dataset)
-test_loader = get_loader(opt, test_dataset)
+if __name__ == '__main__':
+    main()
