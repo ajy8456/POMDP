@@ -52,7 +52,6 @@ class TimeStepSampler(Sampler):
 
 
 def get_batch(config, data):
-    batch_size = config.batch_size
     device = config.device
     max_len = config.max_len
     seq_len = config.seq_len

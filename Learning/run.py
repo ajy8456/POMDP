@@ -3,10 +3,12 @@ from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 import pickle
 import torch as th
+from torch.utils.tensorboard import SummaryWriter
 
 from load import get_loader
 from model import GPT2
 from trainer import Trainer
+from evaluator import Evaluator
 
 
 @dataclass
@@ -37,9 +39,11 @@ class Settings(Serializable):
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    train_steps: int = int(1e4)
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
+    train_steps: int = int(1e4)
     epochs: int = int(100)
+    eval_freq: int = int(1000)
+
 
 def main():
     config = Settings()
@@ -60,15 +64,28 @@ def main():
     # model
     model = GPT2(config)
     optimizer = th.optim.Adam(model.parameters(), lr=1e-5)
+    loss_fn = th.nn.MSELoss()
 
-    # Trainer
+    # Trainer & Evaluator
     trainer = Trainer(config=config,
-                    loader=train_loader,
-                    model=model,
-                    optimizer=optimizer,
-                    loss_fn=loss_fn,
-                    eval_fn=eval_fn)
-    trainer.train()
+                      loader=train_loader,
+                      model=model,
+                      optimizer=optimizer,
+                      loss_fn=loss_fn,
+                      eval_fn=eval_fn)
+    evaluator = Evaluator(config=config,
+                          loader=test_loader,
+                          model=model,
+                          eval_fn=eval_fn)
+
+    step = 0
+    for epoch in range(config.epochs):
+        # Training one epoch        
+        step = trainer.train(step)
+        # evaluating each epoch
+        out = evaluator.eval()
+
+        # |FIXME| saving best model ckpt
 
 if __name__ == '__main__':
     main()

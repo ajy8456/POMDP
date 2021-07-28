@@ -2,13 +2,14 @@ from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
 import logging
 import torch as th
 
+from run import Settings
+
 
 class Trainer(object):
     """
     Generic trainer for a pytorch nn.Module.
     Intended to be flexible, modify as needed.
     """
-
     def __init__(self,
                  config: Settings,
                  loader: th.utils.data.DataLoader,
@@ -32,36 +33,36 @@ class Trainer(object):
         self.loss_fn = loss_fn
         self.eval_fn = eval_fn
 
-    def _train(self):
+    def _train(self, step):
         """Internal function for dealing with the inner training loop."""
-        step = 0
-        for epoch in range(self.config.epochs):
-            for i, data in enumerate(self.loader):
-                observations, actions, attn_mask = data['observations'], data['actions'], data['mask']
-                # |FIXME|
-                target_actions = th.clone(actions)
+        for i, data in enumerate(self.loader):
+            observations, actions, attn_mask = data['observations'], data['actions'], data['mask']
+            # |FIXME|
+            target_actions = th.clone(actions)
 
-                pred_actions = self.model(observations, actions, attn_mask)
+            pred_actions = self.model(observations, actions, attn_mask)
 
-                loss = self.loss_fn(pred_actions, target_actions)
+            loss = self.loss_fn(pred_actions, target_actions)
+            # |FIXME| Logging
 
-                # Backprop + Optimize ...
-                self.optim.zero_grad()
-                loss.backward()
-                self.optim.step()
+            # Backprop + Optimize ...
+            self.optim.zero_grad()
+            loss.backward()
+            self.optim.step()
 
-                # Emit `step` event.
-                # == logging, saving, evaluation
-                # self.hub.publish(Topic.STEP, step)
-                step += 1
+            step += 1
 
-                if step >= self.config.train_steps:
-                    return
+            if step % self.config.eval_freq == 0:
+                eval_val = self.eval_fn()
+                # |FIXME| Logging
 
-    def train(self):
+            if step >= self.config.train_steps:
+                return step
+
+    def train(self, step):
         self.model.train()
         try:
-            self._train()
+            self._train(step)
         except KeyboardInterrupt:
             logging.info('Terminating training due to SIGINT')
         # finally:
