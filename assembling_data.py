@@ -6,8 +6,8 @@ data_dir = os.path.join(os.getcwd(), 'result/dataset')
 
 # For train dataset
 # version = ['sim10K_1', 'sim10K_2', 'sim10K_3', 'sim10K_4']
-version = ['sim10K_1', 'sim10K_2', 'sim10K_3']
-# version = ['sim100']
+# version = ['sim10K_1', 'sim10K_2', 'sim10K_3']
+version = ['sim100_1']
 
 print('='*20, 'train dataset', '='*20)
 print('='*20, 'loading', '='*20)
@@ -69,7 +69,7 @@ print('Saving is finished!!')
 
 # For test dataset
 
-ver = 'sim10K_5'
+ver = 'sim100_2'
 
 print('='*20, 'test dataset', '='*20)
 print('='*20, 'loading', '='*20)
