@@ -5,15 +5,24 @@ import torch as th
 from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
 from torch.utils.data import Dataset, DataLoader, Sampler
 
-from run import Settings
-
 
 class LightDarkDataset(Dataset):
     """
     Get a train/test dataset according to the specified settings.
     """
-    def __init__(self, config: Settings, dataset: Dict, transform=None):
+    def __init__(self, config, dataset: Dict, transform=None):
+        self.config = config
         self.dataset = dataset
+        self.transform = transform
+        
+        # for get_batch()
+        self.device = config.device
+        self.max_len = config.max_len
+        self.seq_len = config.seq_len
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_state = config.dim_state
+        self.dim_reward = config.dim_reward
 
     def __len__(self):
         return len(self.dataset['observation'])
@@ -51,55 +60,55 @@ class TimeStepSampler(Sampler):
         yield index
 
 
-def get_batch(config, data):
-    device = config.device
-    max_len = config.max_len
-    seq_len = config.seq_len
-    dim_observation = config.dim_observation
-    dim_action = config.dim_action
-    dim_state = config.dim_state
-    dim_reward = config.dim_reward
-
-    o, a, r, next_s, timesteps, mask = [], [], [], [], [], [], []
+# |FIXME| hardcode -> how to use config
+def get_batch(data):
+    o, a, r, next_a, next_s, timesteps, mask = [], [], [], [], [], [], []
     for traj in data:
-        i = np.random.randint(0, len(traj['observation']) - 1)
+        if len(traj['observation']) == 2:
+            i = 1
+        else:
+            i = np.random.randint(1, len(traj['observation']) - 1)
 
         # get sequences from dataset
-        o.append(traj['observation'][i:i + seq_len].reshape(1, -1, dim_observation))
-        a.append(traj['action'][i:i + seq_len].reshape(1, -1, dim_action))
-        r.append(traj['reward'][i:i + seq_len].reshape(1, -1, dim_reward))
-        next_s.append(traj['next_state'][i:i + seq_len].reshape(1, -1, dim_state))
-        timesteps.append(np.arange(i, i + o[-1].shape[1]).reshape(1, -1))
-        timesteps[-1][timesteps[-1] >= max_len] = max_len - 1  # padding cutoff
+        o.append(traj['observation'][:i].reshape(1, -1, 2))
+        a.append(traj['action'][:i].reshape(1, -1, 2))
+        r.append(traj['reward'][:i].reshape(1, -1, 1))
+        next_a.append(traj['action'][i].reshape(1, -1, 2))
+        next_s.append(traj['next_state'][:i].reshape(1, -1, 2))
+        timesteps.append(np.arange(0, i).reshape(1, -1))
+        timesteps[-1][timesteps[-1] >= 31] = 31 - 1  # padding cutoff
 
         # padding
         # |FIXME| check padded value & need normalization?
         tlen = o[-1].shape[1]
-        o[-1] = np.concatenate([np.zeros((1, seq_len - tlen, dim_observation)), o[-1]], axis=1)
-        a[-1] = np.concatenate([np.ones((1, seq_len - tlen, dim_action)) * -100., a[-1]], axis=1)
-        r[-1] = np.concatenate([np.zeros((1, seq_len - tlen, 1)), r[-1]], axis=1)
-        next_s[-1] = np.concatenate([np.zeros((1, seq_len - tlen, dim_state)), next_s[-1]], axis=1)
-        mask.append(np.concatenate([np.zeros((1, seq_len - tlen)), np.ones((1, tlen))], axis=1))
+        o[-1] = np.concatenate([np.zeros((1, 31 - tlen, 2)), o[-1]], axis=1)
+        a[-1] = np.concatenate([np.ones((1, 31 - tlen, 2)) * -100., a[-1]], axis=1)
+        r[-1] = np.concatenate([np.zeros((1, 31 - tlen, 1)), r[-1]], axis=1)
+        next_s[-1] = np.concatenate([np.zeros((1, 31 - tlen, 2)), next_s[-1]], axis=1)
+        timesteps[-1] = np.concatenate([np.zeros((1, 31 - tlen)), timesteps[-1]], axis=1)
+        mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
 
-    o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=device)
-    a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=device)
-    r = th.from_numpy(np.concatenate(r, axis=0)).to(dtype=th.float32, device=device)
-    next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=device)
-    timesteps = th.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=th.long, device=device)
-    mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=device)
+    o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device('cuda'))
+    a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device('cuda'))
+    r = th.from_numpy(np.concatenate(r, axis=0)).to(dtype=th.float32, device=th.device('cuda'))
+    next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device('cuda'))
+    next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device('cuda'))
+    timesteps = th.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=th.long, device=th.device('cuda'))
+    mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device('cuda'))
     
     out = {'observation': o,
-           'action': a,
-           'reward': r,
-           'next_state': next_s,
-           'timesteps': timesteps,
-           'mask': mask}
+        'action': a,
+        'reward': r,
+        'next_action': next_a,
+        'next_state': next_s,
+        'timesteps': timesteps,
+        'mask': mask}
 
     return out
 
-def get_loader(config: Settings, dataset: Dict,
+def get_loader(config, dataset: Dict,
                transform=None, collate_fn=get_batch):
-    dataset = LightDarkDataset(config, dataset, transform, collate_fn)
+    dataset = LightDarkDataset(config, dataset, transform)
     loader = DataLoader(dataset,
                         batch_size=config.batch_size,
                         shuffle=config.shuffle,

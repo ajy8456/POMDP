@@ -1,8 +1,6 @@
-from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
-import logging
+import time
 import torch as th
-
-from run import Settings
+from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
 
 
 class Trainer(object):
@@ -11,7 +9,7 @@ class Trainer(object):
     Intended to be flexible, modify as needed.
     """
     def __init__(self,
-                 config: Settings,
+                 config,
                  loader: th.utils.data.DataLoader,
                  model: th.nn.Module,
                  optimizer: th.optim.Optimizer,
@@ -33,43 +31,88 @@ class Trainer(object):
         self.loss_fn = loss_fn
         self.eval_fn = eval_fn
 
-    def _train(self, step):
-        """Internal function for dealing with the inner training loop."""
+    def train(self, epoch):
+        batch_time = AverageMeter('Time', ':6.3f')
+        losses = AverageMeter('Loss', ':.4e')
+        vals = AverageMeter('MAE', ':.4e')
+        progress = ProgressMeter(len(self.loader),
+                                 [batch_time, losses, vals],
+                                 prefix="Epoch: [{}]".format(epoch))
+        
+        self.model.train()
+
+        end = time.time()
         for i, data in enumerate(self.loader):
-            observations, actions, attn_mask = data['observations'], data['actions'], data['mask']
-            # |FIXME|
-            target_actions = th.clone(actions)
+            observations, actions, timestep, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
+            target_actions = data['next_action']
 
             pred_actions = self.model(observations, actions, attn_mask)
+            # pred_actions = self.model(observations, actions, timestep, attn_mask)
 
             loss = self.loss_fn(pred_actions, target_actions)
-            # |FIXME| Logging
 
             # Backprop + Optimize ...
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
 
-            step += 1
+            # measure elapsed time
+            losses.update(loss.item(), data['observation'].size(0))
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-            if step % self.config.eval_freq == 0:
-                eval_val = self.eval_fn()
-                # |FIXME| Logging
+            if i % self.config.train_eval_freq == 0:
+                self.model.eval()
+                with th.no_grad():
+                    val = self.eval_fn(pred_actions, target_actions)
+                vals.update(val.item(), data['observation'].size(0))
 
-            if step >= self.config.train_steps:
-                return step
+            if i % self.config.print_freq == 0:
+                progress.display(i)
 
-    def train(self, step):
-        self.model.train()
-        try:
-            self._train(step)
-        except KeyboardInterrupt:
-            logging.info('Terminating training due to SIGINT')
-        # finally:
-        #     # TODO(ycho): When an interrupt occurs, the current state
-        #     # will ALWAYS be saved to a hardcoded file in a temporary directory.
-        #     # Maybe this is a bad idea.
-        #     Saver(self.model, self.optim).save('/tmp/model-backup.zip')
+        return losses.avg, vals.avg
 
-    def eval(self):
-        return
+    
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self, name, fmt=':f'):
+        self.name = name
+        self.fmt = fmt
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+    def __str__(self):
+        fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
+        return fmtstr.format(**self.__dict__)
+
+
+class ProgressMeter(object):
+    def __init__(self, num_batches, meters, prefix=""):
+        self.batch_fmtstr = self._get_batch_fmtstr(num_batches)
+        self.meters = meters
+        self.prefix = prefix
+
+    def display(self, batch):
+        entries = [self.prefix + self.batch_fmtstr.format(batch)]
+        entries += [str(meter) for meter in self.meters]
+        print('\t'.join(entries))
+
+    def _get_batch_fmtstr(self, num_batches):
+        num_digits = len(str(num_batches // 1))
+        fmt = '{:' + str(num_digits) + 'd}'
+        return '[' + fmt + '/' + fmt.format(num_batches) + ']'

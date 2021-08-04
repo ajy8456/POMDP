@@ -133,3 +133,5 @@ dmypy.json
 
 # Result
 result/
+Learning/dataset/
+Learning/exp/
