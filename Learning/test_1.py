@@ -3,14 +3,16 @@ from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 import pickle
 import torch as th
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from load import get_loader
-from model import GPT2
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint
 
+from model import PositionalEncoding
 
 @dataclass
 class Settings(Serializable):
@@ -33,7 +35,7 @@ class Settings(Serializable):
     num_heads: int = 1
     dim_ffn: int = 128 * 4
 
-    num_layers: int = 3
+    num_layers: int = 6
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -47,11 +49,60 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '4_lr1e-5_layer3_fix_toggle_mask_training_mode_tiny_not_batch'
+    model_name: str = 'test_1_FC_tiny_not_batch'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
     save_freq: int = 20 # per epochs
+
+
+class Test_1(nn.Module):
+    def __init__(self, config):
+        super(Test_1, self).__init__()
+        self.config = config
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
+        self.num_layers = config.num_layers
+        self.action_tanh = config.action_tanh
+        self.max_len = config.max_len
+        self.seq_len = config.seq_len
+
+        self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
+        self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
+        self.pos_embed = PositionalEncoding(self.config)
+        self.ln = nn.LayerNorm(self.dim_hidden)
+
+        self.fc1 = nn.Linear(self.dim_embed, self.dim_hidden)
+        self.fc2 = nn.Linear(self.dim_hidden, self.dim_hidden)
+        self.fc3 = nn.Linear(self.dim_hidden, self.dim_action)
+
+    def forward(self, observations, actions, attn_mask=None):
+        batch_size, seq_len = observations.shape[0], observations.shape[1]
+
+        if attn_mask is None:
+            attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
+        attn_mask = ~attn_mask
+
+        observation_embeddings = self.embed_observation(observations)
+        # observation_embeddings = self.pos_embed(observation_embeddings)
+        action_embeddings = self.embed_action(actions)
+        # action_embeddings = self.pos_embed(action_embeddings)
+
+        stacked_inputs = th.stack((observation_embeddings, action_embeddings), dim=1).permute(0, 2, 1, 3).reshape(batch_size, 2*seq_len, self.dim_hidden)
+        stacked_inputs = self.ln(stacked_inputs)
+
+        stacked_attention_mask = th.stack((attn_mask, attn_mask), dim=1).permute(0, 2, 1).reshape(batch_size, 2*seq_len)
+        stacked_attention_mask = th.unsqueeze(stacked_attention_mask, dim=-1)
+        stacked_attention_mask = th.repeat_interleave(stacked_attention_mask, self.dim_hidden, dim=-1)
+        stacked_inputs.masked_fill_(stacked_attention_mask, 0)
+
+        x = F.relu(self.fc1(stacked_inputs))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+
+        return x
 
 
 def main():
@@ -80,7 +131,7 @@ def main():
 
     # model
     device = th.device(config.device)
-    model = GPT2(config).to(device)
+    model = Test_1(config).to(device)
     optimizer = th.optim.Adam(model.parameters(), lr=config.learning_rate)
     loss_fn = th.nn.SmoothL1Loss()
     eval_fn = th.nn.L1Loss()

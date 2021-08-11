@@ -3,10 +3,11 @@ from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 import pickle
 import torch as th
+import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
 from load import get_loader
-from model import GPT2
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint
@@ -47,18 +48,51 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '4_lr1e-5_layer3_fix_toggle_mask_training_mode_tiny_not_batch'
+    model_name: str = 'test_2_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
     save_freq: int = 20 # per epochs
 
 
+class Test_2(nn.Module):
+    def __init__(self, config):
+        super(Test_2, self).__init__()
+        self.config = config
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
+        self.num_layers = config.num_layers
+
+
+        self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+
+        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.fc1 = nn.Linear(self.dim_hidden, self.dim_action)
+
+
+    def forward(self, observations, actions, attn_mask=None):
+        batch_size, seq_len = observations.shape[0], observations.shape[1]
+        
+        input = th.cat((observations, actions), dim=-1)
+        input_embeddings = self.embed(input)
+
+        stacked_attention_mask = th.unsqueeze(attn_mask, dim=-1)
+        stacked_attention_mask = th.repeat_interleave(~stacked_attention_mask, self.dim_hidden, dim=-1)
+        input_embeddings.masked_fill_(stacked_attention_mask, 0)
+
+        output, h_n = self.rnn(input_embeddings)
+        x = self.fc1(h_n)
+
+        return x
+
+
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_tiny.pickle'
-    test_filename = 'light_dark_tiny.pickle'
+    train_filename = 'light_dark_train.pickle'
+    test_filename = 'light_dark_test.pickle'
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
@@ -80,7 +114,7 @@ def main():
 
     # model
     device = th.device(config.device)
-    model = GPT2(config).to(device)
+    model = Test_2(config).to(device)
     optimizer = th.optim.Adam(model.parameters(), lr=config.learning_rate)
     loss_fn = th.nn.SmoothL1Loss()
     eval_fn = th.nn.L1Loss()

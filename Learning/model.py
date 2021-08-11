@@ -191,6 +191,7 @@ class GPT2(nn.Module):
         if attn_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
             attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
+        attn_mask = ~attn_mask
 
         observation_embeddings = self.embed_observation(observations)
         observation_embeddings = self.pos_embed(observation_embeddings)

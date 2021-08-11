@@ -66,6 +66,7 @@ class Trainer(object):
                 with th.no_grad():
                     val = self.eval_fn(pred_actions, target_actions)
                 vals.update(val.item(), data['observation'].size(0))
+                self.model.train()
 
             if i % self.config.print_freq == 0:
                 progress.display(i)
