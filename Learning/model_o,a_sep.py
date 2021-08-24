@@ -170,9 +170,8 @@ class GPT2(nn.Module):
         self.max_len = config.max_len
         self.seq_len = config.seq_len
 
-        self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
-        # self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
-        # self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
+        self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
+        self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
         self.pos_embed = PositionalEncoding(self.config)
         # self.pos_embed = nn.Embedding(self.max_len, self.dim_embed)
         self.ln = nn.LayerNorm(self.dim_hidden)
@@ -189,22 +188,15 @@ class GPT2(nn.Module):
     # def forward(self, observations, actions, timesteps, attn_mask=None):
         batch_size, seq_len = observations.shape[0], observations.shape[1]
 
-        # for consisting token as (o,a); not separating
-        inputs = th.cat((observations, actions), dim=-1)
-        input_embbedings = self.embed(inputs)
-        input_embbedings = self.pos_embed(input_embbedings)
-        input_embbedings = self.ln(input_embbedings)
-
         if attn_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
             attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
         attn_mask = ~attn_mask
 
-        # # for consisting token as (o),(a); separating
-        # observation_embeddings = self.embed_observation(observations)
-        # observation_embeddings = self.pos_embed(observation_embeddings)
-        # action_embeddings = self.embed_action(actions)
-        # action_embeddings = self.pos_embed(action_embeddings)
+        observation_embeddings = self.embed_observation(observations)
+        observation_embeddings = self.pos_embed(observation_embeddings)
+        action_embeddings = self.embed_action(actions)
+        action_embeddings = self.pos_embed(action_embeddings)
 
         # time_embeddings = self.pos_embed(timesteps)
         # observation_embeddings = self.embed_observation(observations) + time_embeddings
@@ -212,29 +204,25 @@ class GPT2(nn.Module):
         
         # this makes the sequence look like (R_1, o_1, a_1, R_2, o_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
-        # stacked_inputs = th.stack((observation_embeddings, action_embeddings), dim=1).permute(0, 2, 1, 3).reshape(batch_size, 2*seq_len, self.dim_hidden)
-        # stacked_inputs = self.ln(stacked_inputs)        
+        stacked_inputs = th.stack((observation_embeddings, action_embeddings), dim=1).permute(0, 2, 1, 3).reshape(batch_size, 2*seq_len, self.dim_hidden)
+        stacked_inputs = self.ln(stacked_inputs)        
 
         # to make the attention mask fit the stacked inputs, have to stack it as well
-        # stacked_attention_mask = th.stack((attn_mask, attn_mask), dim=1).permute(0, 2, 1).reshape(batch_size, 2*seq_len)
+        stacked_attention_mask = th.stack((attn_mask, attn_mask), dim=1).permute(0, 2, 1).reshape(batch_size, 2*seq_len)
 
         # we feed in the input embeddings (not word indices as in NLP) to the model
-        # dec_outputs, attn_prob = self.layers[0](stacked_inputs, stacked_attention_mask)
-        # for layer in self.layers[1:]:
-        #     dec_outputs, attn_prob = layer(dec_outputs, stacked_attention_mask)
-        dec_outputs, attn_prob = self.layers[0](input_embbedings, attn_mask)
+        dec_outputs, attn_prob = self.layers[0](stacked_inputs, stacked_attention_mask)
         for layer in self.layers[1:]:
-            dec_outputs, attn_prob = layer(dec_outputs, attn_mask)
+            dec_outputs, attn_prob = layer(dec_outputs, stacked_attention_mask)
 
-        # # reshape x so that the second dimension corresponds to the original
-        # # observations (0), or actions (1); i.e. x[:,1,t] is the token for a_t
-        # dec_outputs = dec_outputs.reshape(batch_size, seq_len, 2, self.dim_hidden).permute(0, 2, 1, 3)
+        # reshape x so that the second dimension corresponds to the original
+        # observations (0), or actions (1); i.e. x[:,1,t] is the token for a_t
+        dec_outputs = dec_outputs.reshape(batch_size, seq_len, 2, self.dim_hidden).permute(0, 2, 1, 3)
 
         # get predictions
-        # # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
-        # # state_preds = self.predict_state(x[:,2])    # predict next state given state and action
-        # action_preds = self.predict_action(dec_outputs[:,1].flatten(start_dim=1))  # predict next action given state
-        action_preds = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
+        # state_preds = self.predict_state(x[:,2])    # predict next state given state and action
+        action_preds = self.predict_action(dec_outputs[:,1].flatten(start_dim=1))  # predict next action given state
 
         return action_preds
 
