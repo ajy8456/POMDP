@@ -18,7 +18,7 @@ from model import PositionalEncoding
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 1
+    batch_size: int = 128
     shuffle: bool = True
     max_len: int = 1000
     seq_len: int = 31
@@ -44,12 +44,12 @@ class Settings(Serializable):
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 100
+    epochs: int = 10000
     learning_rate: float = 1e-5
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test_1_FC_tiny_not_batch'
+    model_name: str = 'test_1_FC_tiny_10Kep'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
