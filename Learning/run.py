@@ -42,7 +42,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = None # checkpoint file name for resuming
+    resume: str = 'ckpt_epoch_5000.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 10000
     learning_rate: float = 1e-7
@@ -110,12 +110,14 @@ def main():
 
     # load checkpoint for resuming
     if config.resume is not None:
-        if os.path.isfile(os.path.join(model_dir, config.resume)):
-            start_epoch, best_error, model, optimizer = load_checkpoint(model, optimizer, scheduler, config.resume,)
+        filename = os.path.join(model_dir, config.resume)
+        if os.path.isfile(filename):
+            start_epoch, best_error, model, optimizer, scheduler = load_checkpoint(config, filename, model, optimizer, scheduler)
             start_epoch += 1
             print("Loaded checkpoint '{}' (epoch {})".format(config.resume, start_epoch))
         else:
             print("No checkpoint found at '{}'".format(config.resume))
+            return
 
 
     for epoch in range(start_epoch, config.epochs+1):
