@@ -56,6 +56,7 @@ class Trainer(object):
             # Backprop + Optimize ...
             self.optim.zero_grad()
             loss.backward()
+            th.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
             self.optim.step()
 
             if self.scheduler is not None:
