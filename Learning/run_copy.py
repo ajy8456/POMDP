@@ -28,11 +28,11 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    dim_embed: int = 256
-    dim_hidden: int = 256
-    dim_head: int = 256
+    dim_embed: int = 128
+    dim_hidden: int = 128
+    dim_head: int = 128
     num_heads: int = 1
-    dim_ffn: int = 256 * 4
+    dim_ffn: int = 128 * 4
 
     num_layers: int = 3
 
@@ -44,12 +44,11 @@ class Settings(Serializable):
     # device: str = 'cpu'
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 10000
-    learning_rate: float = 1e-7
-    warmup_epoch: float = 1e4
+    learning_rate: float = 1e-2
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.25_lr_scheduler_1e-3_to_le-7_dim256'
+    model_name: str = '8.24_lr1e-2'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -84,7 +83,6 @@ def main():
     device = th.device(config.device)
     model = GPT2(config).to(device)
     optimizer = th.optim.Adam(model.parameters(), lr=config.learning_rate)
-    scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: min((epoch+1)/config.warmup_epoch, 1))
     loss_fn = th.nn.SmoothL1Loss()
     eval_fn = th.nn.L1Loss()
 
@@ -93,7 +91,6 @@ def main():
                       loader=train_loader,
                       model=model,
                       optimizer=optimizer,
-                      scheduler=scheduler,
                       loss_fn=loss_fn,
                       eval_fn=eval_fn)
     evaluator = Evaluator(config=config,

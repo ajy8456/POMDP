@@ -14,7 +14,8 @@ class Trainer(object):
                  model: th.nn.Module,
                  optimizer: th.optim.Optimizer,
                  loss_fn: Callable[[th.Tensor, th.Tensor], th.Tensor],
-                 eval_fn: Callable = None
+                 eval_fn: Callable = None,
+                 scheduler: th.optim.lr_scheduler = None
                  ):
         """
         Args:
@@ -28,6 +29,7 @@ class Trainer(object):
         self.loader = loader
         self.model = model
         self.optim = optimizer
+        self.scheduler = scheduler
         self.loss_fn = loss_fn
         self.eval_fn = eval_fn
 
@@ -55,6 +57,9 @@ class Trainer(object):
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
+
+            if self.scheduler is not None:
+                self.scheduler.step()
 
             # measure elapsed time
             losses.update(loss.item(), data['observation'].size(0))

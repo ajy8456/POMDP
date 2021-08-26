@@ -43,12 +43,12 @@ class Settings(Serializable):
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 100
-    learning_rate: float = 1e-5
+    epochs: int = 10000
+    learning_rate: float = 1e-4
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test_2_RNN'
+    model_name: str = '8.25_RNN_lr1e-4'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -91,8 +91,8 @@ class Test_2(nn.Module):
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_train.pickle'
-    test_filename = 'light_dark_test.pickle'
+    train_filename = 'light_dark_10K.pickle'
+    test_filename = 'light_dark_10K.pickle'
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
