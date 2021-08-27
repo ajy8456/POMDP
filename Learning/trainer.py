@@ -45,11 +45,11 @@ class Trainer(object):
 
         end = time.time()
         for i, data in enumerate(self.loader):
-            observations, actions, timestep, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
+            observations, actions, timesteps, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
             target_actions = data['next_action']
 
             # pred_actions = self.model(observations, actions, attn_mask)
-            pred_actions = self.model(observations, actions, timestep, attn_mask)
+            pred_actions = self.model(observations, actions, timesteps, attn_mask)
 
             loss = self.loss_fn(pred_actions, target_actions)
 

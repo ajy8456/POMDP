@@ -34,10 +34,10 @@ class Evaluator():
         with th.no_grad():
             end = time.time()
             for i, data in enumerate(self.loader):
-                observations, actions, attn_mask = data['observation'], data['action'], data['mask']
+                observations, actions, time_steps, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
                 target_actions = data['next_action']
 
-                pred_actions = self.model(observations, actions, attn_mask)
+                pred_actions = self.model(observations, actions, time_steps, attn_mask)
                 val = self.eval_fn(pred_actions, target_actions)
 
                 # measure elapsed time

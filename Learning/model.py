@@ -196,15 +196,15 @@ class GPT2(nn.Module):
 
         # for consisting token as (o,a); not separating
         inputs = th.cat((observations, actions), dim=-1)
-        input_embbedings = self.embed(inputs)
+        input_embeddings = self.embed(inputs)
         
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
             time_embeddings = self.embed_timestep(timesteps)
-            input_embedings = input_embedings + time_embeddings
+            input_embeddings = input_embeddings + time_embeddings
         else:
-            input_embbedings = self.pos_embed(input_embbedings)
-            input_embbedings = self.ln(input_embbedings)
+            input_embeddings = self.pos_embed(input_embeddings)
+            input_embeddings = self.ln(input_embeddings)
 
         if attn_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
@@ -233,7 +233,7 @@ class GPT2(nn.Module):
         # dec_outputs, attn_prob = self.layers[0](stacked_inputs, stacked_attention_mask)
         # for layer in self.layers[1:]:
         #     dec_outputs, attn_prob = layer(dec_outputs, stacked_attention_mask)
-        dec_outputs, attn_prob = self.layers[0](input_embbedings, attn_mask)
+        dec_outputs, attn_prob = self.layers[0](input_embeddings, attn_mask)
         for layer in self.layers[1:]:
             dec_outputs, attn_prob = layer(dec_outputs, attn_mask)
 
