@@ -11,6 +11,7 @@ from model import GPT2
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
+from utils import CosineAnnealingWarmUpRestarts
 
 
 @dataclass
@@ -28,13 +29,13 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    dim_embed: int = 512
-    dim_hidden: int = 512
-    dim_head: int = 512
+    dim_embed: int = 128
+    dim_hidden: int = 128
+    dim_head: int = 128
     num_heads: int = 1
-    dim_ffn: int = 512 * 4
+    dim_ffn: int = 128 * 4
 
-    num_layers: int = 6
+    num_layers: int = 3
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -45,13 +46,20 @@ class Settings(Serializable):
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 10000
+    # About learning rate
+    # |NOTE| using small learning rate, in order to apply warm up
     learning_rate: float = 1e-7
     weight_decay: float = 1e-4
-    warmup_epoch: float = 1e4
+    warmup_step: int = 1e4
+    # For cosine annealing
+    T_0: int = 1e4
+    T_mult: int = 2
+    lr_max: float = 0.1
+    lr_mult: float = 0.9
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.27_batch1024_maxlen100_dim512_layer6'
+    model_name: str = '8.27_batch1024_maxlen100_dim128_layer3_AdamWR'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -88,7 +96,15 @@ def main():
     optimizer = th.optim.AdamW(model.parameters(),
                                lr=config.learning_rate,
                                weight_decay=config.weight_decay)
-    scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda epoch: min((epoch+1)/config.warmup_epoch, 1))
+    # scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step+1)/config.warmup_step, 1))
+    scheduler = CosineAnnealingWarmUpRestarts(
+        optimizer=optimizer,
+        T_0=config.T_0,
+        T_mult=config.T_mult,
+        eta_max=config.lr_max,
+        T_up=config.warmup_step,
+        gamma=config.lr_mult
+    )
     loss_fn = th.nn.SmoothL1Loss()
     eval_fn = th.nn.L1Loss()
 
