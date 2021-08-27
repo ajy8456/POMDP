@@ -173,8 +173,13 @@ class GPT2(nn.Module):
         self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         # self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
         # self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
-        self.pos_embed = PositionalEncoding(self.config)
-        # self.pos_embed = nn.Embedding(self.max_len, self.dim_embed)
+        
+        # select trainable/fixed positional encoding
+        if self.config.train_pos_en:
+            self.embed_timestep = nn.Embedding(self.max_len, self.dim_embed)
+        else:
+            self.pos_embed = PositionalEncoding(self.config)
+        
         self.ln = nn.LayerNorm(self.dim_hidden)
 
         self.layers = []
@@ -185,15 +190,21 @@ class GPT2(nn.Module):
 
         self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
-    def forward(self, observations, actions, attn_mask=None):
-    # def forward(self, observations, actions, timesteps, attn_mask=None):
+    # def forward(self, observations, actions, attn_mask=None):
+    def forward(self, observations, actions, timesteps, attn_mask=None):
         batch_size, seq_len = observations.shape[0], observations.shape[1]
 
         # for consisting token as (o,a); not separating
         inputs = th.cat((observations, actions), dim=-1)
         input_embbedings = self.embed(inputs)
-        input_embbedings = self.pos_embed(input_embbedings)
-        input_embbedings = self.ln(input_embbedings)
+        
+        # select trainable/fixed positional encoding
+        if self.config.train_pos_en:
+            time_embeddings = self.embed_timestep(timesteps)
+            input_embedings = input_embedings + time_embeddings
+        else:
+            input_embbedings = self.pos_embed(input_embbedings)
+            input_embbedings = self.ln(input_embbedings)
 
         if attn_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not

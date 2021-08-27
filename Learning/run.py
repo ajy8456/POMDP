@@ -37,6 +37,8 @@ class Settings(Serializable):
 
     num_layers: int = 3
 
+    train_pos_en: bool = True
+
     dropout: float = 0.0
     action_tanh: bool = False
 
@@ -46,7 +48,8 @@ class Settings(Serializable):
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 10000
-    # About learning rate
+
+    # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
     learning_rate: float = 1e-7
     weight_decay: float = 1e-4
@@ -59,7 +62,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.27_batch1024_maxlen100_dim128_layer3_AdamWR'
+    model_name: str = '8.27_batch1024_maxlen100_dim128_layer3_AdamWR_TrainPosEn'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
