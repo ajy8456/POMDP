@@ -17,9 +17,9 @@ from saver import save_checkpoint, load_checkpoint
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 128
+    batch_size: int = 1024
     shuffle: bool = True
-    max_len: int = 1000
+    max_len: int = 100
     seq_len: int = 31
     # |TODO| modify to automatically change
     dim_observation: int = 2
@@ -28,13 +28,13 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    dim_embed: int = 128
-    dim_hidden: int = 128
-    dim_head: int = 128
+    dim_embed: int = 512
+    dim_hidden: int = 512
+    dim_head: int = 512
     num_heads: int = 1
-    dim_ffn: int = 128 * 4
+    dim_ffn: int = 512 * 4
 
-    num_layers: int = 3
+    num_layers: int = 6
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -42,7 +42,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = 'ckpt_epoch_5000.pth' # checkpoint file name for resuming
+    resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 10000
     learning_rate: float = 1e-7
@@ -51,7 +51,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.26_lr_scheduler_1e-3_to_le-7_AdamW_clip'
+    model_name: str = '8.27_batch1024_maxlen100_dim512_layer6'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
