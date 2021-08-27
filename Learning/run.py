@@ -50,9 +50,9 @@ class Settings(Serializable):
     # |NOTE| using small learning rate, in order to apply warm up
     learning_rate: float = 1e-7
     weight_decay: float = 1e-4
-    warmup_step: int = 1e4
+    warmup_step: int = int(1e4)
     # For cosine annealing
-    T_0: int = 1e4
+    T_0: int = int(1e4)
     T_mult: int = 2
     lr_max: float = 0.1
     lr_mult: float = 0.9
