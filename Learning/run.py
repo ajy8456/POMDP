@@ -7,7 +7,7 @@ import torch as th
 from torch.utils.tensorboard import SummaryWriter
 
 from load import get_loader
-from model import GPT2
+from model import GPT2, RNN
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
@@ -29,6 +29,9 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
+    model: str = 'RNN' # GPT or RNN
+    optimizer: str = 'AdamW' # AdamW or AdamWR
+
     dim_embed: int = 128
     dim_hidden: int = 128
     dim_head: int = 128
@@ -47,11 +50,11 @@ class Settings(Serializable):
     # device: str = 'cpu'
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 10000
+    epochs: int = 100000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
-    learning_rate: float = 1e-7
+    learning_rate: float = 1e-5
     weight_decay: float = 1e-4
     warmup_step: int = int(1e4)
     # For cosine annealing
@@ -62,7 +65,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.27_batch1024_maxlen100_dim128_layer3_AdamWR_TrainPosEn'
+    model_name: str = '8.28_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -95,19 +98,35 @@ def main():
 
     # model
     device = th.device(config.device)
-    model = GPT2(config).to(device)
+    if config.model == 'GPT':
+        model = GPT2(config).to(device)
+    elif config.model == 'RNN':
+        model = RNN(config).to(device)
+    else:
+        # |FIXME| using error?exception?logging?
+        print(f'"{config.model}" is not support!! You should select "GPT" or "RNN".')
+        return
+
     optimizer = th.optim.AdamW(model.parameters(),
                                lr=config.learning_rate,
                                weight_decay=config.weight_decay)
-    # scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step+1)/config.warmup_step, 1))
-    scheduler = CosineAnnealingWarmUpRestarts(
-        optimizer=optimizer,
-        T_0=config.T_0,
-        T_mult=config.T_mult,
-        eta_max=config.lr_max,
-        T_up=config.warmup_step,
-        gamma=config.lr_mult
-    )
+    
+    if config.optimizer == 'AdamW':
+        scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step+1)/config.warmup_step, 1))
+    elif config.optimizer == 'AdamWR':
+        scheduler = CosineAnnealingWarmUpRestarts(
+            optimizer=optimizer,
+            T_0=config.T_0,
+            T_mult=config.T_mult,
+            eta_max=config.lr_max,
+            T_up=config.warmup_step,
+            gamma=config.lr_mult
+        )
+    else:
+        # |FIXME| using error?exception?logging?
+        print(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
+        return
+
     loss_fn = th.nn.SmoothL1Loss()
     eval_fn = th.nn.L1Loss()
 
@@ -135,6 +154,7 @@ def main():
             start_epoch += 1
             print("Loaded checkpoint '{}' (epoch {})".format(config.resume, start_epoch))
         else:
+            # |FIXME| using error?exception?logging?
             print("No checkpoint found at '{}'".format(config.resume))
             return
 

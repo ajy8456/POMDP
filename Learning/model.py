@@ -1,4 +1,5 @@
 import math
+from os import pread
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
@@ -245,9 +246,43 @@ class GPT2(nn.Module):
         # # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
         # # state_preds = self.predict_state(x[:,2])    # predict next state given state and action
         # action_preds = self.predict_action(dec_outputs[:,1].flatten(start_dim=1))  # predict next action given state
-        action_preds = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        pred = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        return pred
 
-        return action_preds
+
+class RNN(nn.Module):
+    def __init__(self, config):
+        super(RNN, self).__init__()
+        self.config = config
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
+        self.num_layers = config.num_layers
+
+        self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.fc1 = nn.Linear(self.dim_hidden, self.dim_action)
+
+
+    def forward(self, observations, actions, timesteps, attn_mask=None):
+        batch_size, seq_len = observations.shape[0], observations.shape[1]
+        
+        input = th.cat((observations, actions), dim=-1)
+        input_embeddings = self.embed(input)
+
+        stacked_attention_mask = th.unsqueeze(attn_mask, dim=-1)
+        stacked_attention_mask = th.repeat_interleave(~stacked_attention_mask, self.dim_hidden, dim=-1)
+        input_embeddings.masked_fill_(stacked_attention_mask, 0)
+
+        # # swithing dimension order for batch_first=False
+        # input_embeddings = th.transpose(input_embeddings, 0, 1)
+
+        h_0 = th.zeros(self.num_layers, batch_size, self.dim_hidden).to(self.config.device)
+        output, h_n = self.rnn(input_embeddings, h_0)
+        pred = self.fc1(output[:, -1, :])
+
+        return pred
 
 
 def test():
