@@ -14,12 +14,17 @@ class RegressionLoss(nn.Module):
             self.loss_reward = nn.MSELoss()
     
     def forward(self, pred, target):
+        loss = {}
         loss_action = self.loss_action(pred['action'], target['action'])
+        loss['action'] = loss_action
+        
         if self.config.use_reward:
             loss_reward = self.loss_reward(pred['reward'], target['reward'])
+            loss['reward'] = loss_reward
+            loss_total = loss_action + self.coefficient_loss * loss_reward
+        else:
+            loss_total = loss_action
 
-        loss_total = loss_action + self.coefficient_loss * loss_reward
-
-        loss = {'total': loss_total, 'action': loss_action, 'reward': loss_reward}
+        loss['total'] = loss_total
 
         return loss

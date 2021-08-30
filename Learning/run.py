@@ -19,7 +19,7 @@ from utils import CosineAnnealingWarmUpRestarts
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 1
+    batch_size: int = 4096
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -30,8 +30,8 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
-    optimizer: str = 'AdamWR' # AdamW or AdamWR
+    model: str = 'GPT' # GPT or RNN
+    optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
@@ -43,7 +43,7 @@ class Settings(Serializable):
 
     train_pos_en: bool = False
     use_reward: bool = True
-    coefficient_loss: float = 0.5
+    coefficient_loss: float = 1e-3
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -68,18 +68,18 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test'
+    model_name: str = '8.30_woTrPos_AdamW_reward'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
-    save_freq: int = 100 # per epochs
+    save_freq: int = 1000 # per epochs
 
 
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_train.pickle'
-    test_filename = 'light_dark_test.pickle'
+    train_filename = 'light_dark_10K.pickle'
+    test_filename = 'light_dark_tiny.pickle'
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
