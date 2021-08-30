@@ -18,7 +18,7 @@ from utils import CosineAnnealingWarmUpRestarts
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 1024
+    batch_size: int = 4096
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -30,7 +30,7 @@ class Settings(Serializable):
 
     # Architecture
     model: str = 'RNN' # GPT or RNN
-    optimizer: str = 'AdamW' # AdamW or AdamWR
+    optimizer: str = 'AdamWR' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
@@ -40,7 +40,7 @@ class Settings(Serializable):
 
     num_layers: int = 3
 
-    train_pos_en: bool = True
+    train_pos_en: bool = False
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -65,18 +65,18 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.28_RNN'
+    model_name: str = '8.30_bigdata_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
-    save_freq: int = 1000 # per epochs
+    save_freq: int = 100 # per epochs
 
 
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_10K.pickle'
-    test_filename = 'light_dark_tiny.pickle'
+    train_filename = 'light_dark_train.pickle'
+    test_filename = 'light_dark_test.pickle'
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
