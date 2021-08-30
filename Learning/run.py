@@ -18,7 +18,7 @@ from utils import CosineAnnealingWarmUpRestarts
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 4096
+    batch_size: int = 2
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -29,7 +29,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
+    model: str = 'GPT' # GPT or RNN
     optimizer: str = 'AdamWR' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -65,7 +65,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.30_bigdata_RNN'
+    model_name: str = 'test'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
