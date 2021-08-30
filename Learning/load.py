@@ -49,7 +49,7 @@ class BatchMaker():
         self.device = config.device
 
     def __call__(self, data):
-        o, a, r, next_a, next_s, timesteps, mask = [], [], [], [], [], [], []
+        o, a, r, next_a, next_s, next_r, timestep, mask = [], [], [], [], [], [], [], []
         for traj in data:
             if len(traj['observation']) == 2:
                 i = 1
@@ -61,9 +61,10 @@ class BatchMaker():
             a.append(traj['action'][:i].reshape(1, -1, 2))
             r.append(traj['reward'][:i].reshape(1, -1, 1))
             next_a.append(traj['action'][i].reshape(1, -1, 2))
-            next_s.append(traj['next_state'][:i].reshape(1, -1, 2))
-            timesteps.append(np.arange(0, i).reshape(1, -1))
-            timesteps[-1][timesteps[-1] >= 31] = 31 - 1  # padding cutoff
+            next_r.append(traj['reward'][i].reshape(1, -1, 1))
+            next_s.append(traj['next_state'][1:i+1].reshape(1, -1, 2))
+            timestep.append(np.arange(0, i).reshape(1, -1))
+            timestep[-1][timestep[-1] >= 31] = 31 - 1  # padding cutoff
 
             # padding
             # |FIXME| check padded value & need normalization?
@@ -72,23 +73,25 @@ class BatchMaker():
             a[-1] = np.concatenate([np.ones((1, 31 - tlen, 2)) * -100., a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, 31 - tlen, 1)), r[-1]], axis=1)
             next_s[-1] = np.concatenate([np.zeros((1, 31 - tlen, 2)), next_s[-1]], axis=1)
-            timesteps[-1] = np.concatenate([np.zeros((1, 31 - tlen)), timesteps[-1]], axis=1)
+            timestep[-1] = np.concatenate([np.zeros((1, 31 - tlen)), timestep[-1]], axis=1)
             mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
 
         o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         r = th.from_numpy(np.concatenate(r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        next_r = th.from_numpy(np.concatenate(next_r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
-        timesteps = th.from_numpy(np.concatenate(timesteps, axis=0)).to(dtype=th.long, device=th.device(self.device))
+        timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.device))
         mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
         
         out = {'observation': o,
             'action': a,
             'reward': r,
             'next_action': next_a,
+            'next_reward': next_r,
             'next_state': next_s,
-            'timesteps': timesteps,
+            'timestep': timestep,
             'mask': mask}
 
         return out

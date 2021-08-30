@@ -13,7 +13,7 @@ class Evaluator():
                  config,
                  loader: th.utils.data.DataLoader,
                  model: th.nn.Module,
-                 eval_fn: Callable = None
+                 eval_fn: Callable[[Dict[str, th.Tensor], Dict[str, th.Tensor]], Dict[str, th.Tensor]]
                  ):
         self.config = config
         self.loader = loader
@@ -22,9 +22,10 @@ class Evaluator():
     
     def eval(self, epoch):        
         batch_time = AverageMeter('Time', ':6.3f')
-        vals = AverageMeter('MAE', ':.4e')
+        vals_action = AverageMeter('Action MAE', ':.4e')
+        vals_reward = AverageMeter('Reward MSE', ':.4e')
         progress = ProgressMeter(len(self.loader),
-                                 [batch_time, vals],
+                                 [batch_time, vals_action],
                                  prefix="Epoch: [{}]".format(epoch))
         
         self.model.eval()
@@ -34,18 +35,30 @@ class Evaluator():
         with th.no_grad():
             end = time.time()
             for i, data in enumerate(self.loader):
-                observations, actions, time_steps, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
-                target_actions = data['next_action']
+                target = {}
+                target_action = th.squeeze(data['next_action'])
+                target['action'] = target_action
+                if self.config.use_reward:
+                    target_reward = th.squeeze(data['next_reward'])
+                    target['reward'] = target_reward
 
-                pred_actions = self.model(observations, actions, time_steps, attn_mask)
-                val = self.eval_fn(pred_actions, target_actions)
+                pred = self.model(data)
+
+                val = self.eval_fn(pred, target)
 
                 # measure elapsed time
-                vals.update(val.item(), data['observation'].size(0))
+                vals_action.update(val['action'].item(), data['observation'].size(0))
+                if self.config.use_reward:
+                    vals_reward.update(val['reward'].item(), data['observation'].size(0))
                 batch_time.update(time.time() - end)
                 end = time.time()
 
                 if i % self.config.print_freq == 0:
                     progress.display(i)
 
-        return vals.avg
+            vals = {}
+            vals['action'] = vals_action.avg
+            if self.config.use_reward:
+                vals['reward'] = vals_reward.avg
+
+        return vals

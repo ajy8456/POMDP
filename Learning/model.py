@@ -163,6 +163,7 @@ class GPT2(nn.Module):
         self.config = config
         self.dim_observation = config.dim_observation
         self.dim_action = config.dim_action
+        self.dim_reward = config.dim_reward
         self.dim_embed = config.dim_embed
         self.dim_hidden = config.dim_hidden
         self.num_layers = config.num_layers
@@ -170,10 +171,14 @@ class GPT2(nn.Module):
         self.max_len = config.max_len
         self.seq_len = config.seq_len
 
-        self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         # self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
         # self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
-        
+        if self.config.use_reward:
+            self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
+            self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
+        else:
+            self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
             self.embed_timestep = nn.Embedding(self.max_len, self.dim_embed)
@@ -191,61 +196,41 @@ class GPT2(nn.Module):
         self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
     # def forward(self, observations, actions, attn_mask=None):
-    def forward(self, observations, actions, timesteps, attn_mask=None):
-        batch_size, seq_len = observations.shape[0], observations.shape[1]
+    def forward(self, data):
+        batch_size, seq_len = data['observation'].shape[0], data['observation'].shape[1]
 
-        # for consisting token as (o,a); not separating
-        inputs = th.cat((observations, actions), dim=-1)
+        # for consisting token as (o,a,r); not separating
+        if self.config.use_reward:
+            inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
+        else:
+            inputs = th.cat((data['observation'], data['action']), dim=-1)
         input_embeddings = self.embed(inputs)
         
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
-            time_embeddings = self.embed_timestep(timesteps)
+            time_embeddings = self.embed_timestep(data['timestep'])
             input_embeddings = input_embeddings + time_embeddings
         else:
             input_embeddings = self.pos_embed(input_embeddings)
             input_embeddings = self.ln(input_embeddings)
 
-        if attn_mask is None:
+        if 'mask' not in data:
             # attention mask for GPT: 1 if can be attended to, 0 if not
             attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
-        attn_mask = ~attn_mask
+        attn_mask = ~data['mask']
 
-        # # for consisting token as (o),(a); separating
-        # observation_embeddings = self.embed_observation(observations)
-        # observation_embeddings = self.pos_embed(observation_embeddings)
-        # action_embeddings = self.embed_action(actions)
-        # action_embeddings = self.pos_embed(action_embeddings)
-
-        # time_embeddings = self.pos_embed(timesteps)
-        # observation_embeddings = self.embed_observation(observations) + time_embeddings
-        # action_embeddings = self.embed_action(actions) + time_embeddings
-        
-        # this makes the sequence look like (R_1, o_1, a_1, R_2, o_2, a_2, ...)
-        # which works nice in an autoregressive sense since states predict actions
-        # stacked_inputs = th.stack((observation_embeddings, action_embeddings), dim=1).permute(0, 2, 1, 3).reshape(batch_size, 2*seq_len, self.dim_hidden)
-        # stacked_inputs = self.ln(stacked_inputs)        
-
-        # to make the attention mask fit the stacked inputs, have to stack it as well
-        # stacked_attention_mask = th.stack((attn_mask, attn_mask), dim=1).permute(0, 2, 1).reshape(batch_size, 2*seq_len)
-
-        # we feed in the input embeddings (not word indices as in NLP) to the model
-        # dec_outputs, attn_prob = self.layers[0](stacked_inputs, stacked_attention_mask)
-        # for layer in self.layers[1:]:
-        #     dec_outputs, attn_prob = layer(dec_outputs, stacked_attention_mask)
         dec_outputs, attn_prob = self.layers[0](input_embeddings, attn_mask)
         for layer in self.layers[1:]:
             dec_outputs, attn_prob = layer(dec_outputs, attn_mask)
 
-        # # reshape x so that the second dimension corresponds to the original
-        # # observations (0), or actions (1); i.e. x[:,1,t] is the token for a_t
-        # dec_outputs = dec_outputs.reshape(batch_size, seq_len, 2, self.dim_hidden).permute(0, 2, 1, 3)
-
         # get predictions
-        # # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
-        # # state_preds = self.predict_state(x[:,2])    # predict next state given state and action
-        # action_preds = self.predict_action(dec_outputs[:,1].flatten(start_dim=1))  # predict next action given state
-        pred = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        pred = {}
+        pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        pred['action'] = pred_action
+        if self.config.use_reward:
+            pred_reward = self.predict_reward(dec_outputs.flatten(start_dim=1))
+            pred['reward'] = pred_reward
+
         return pred
 
 
@@ -255,49 +240,46 @@ class RNN(nn.Module):
         self.config = config
         self.dim_observation = config.dim_observation
         self.dim_action = config.dim_action
+        self.dim_reward = config.dim_reward
         self.dim_embed = config.dim_embed
         self.dim_hidden = config.dim_hidden
         self.num_layers = config.num_layers
 
-        self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
-        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
-        self.fc1 = nn.Linear(self.dim_hidden, self.dim_action)
-
-
-    def forward(self, observations, actions, timesteps, attn_mask=None):
-        batch_size, seq_len = observations.shape[0], observations.shape[1]
+        if self.config.use_reward:
+            self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
+            self.predict_reward = nn.Linear(self.dim_hidden, self.dim_reward)
+        else:
+            self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         
-        input = th.cat((observations, actions), dim=-1)
-        input_embeddings = self.embed(input)
+        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.predict_action = nn.Linear(self.dim_hidden, self.dim_action)
 
-        stacked_attention_mask = th.unsqueeze(attn_mask, dim=-1)
-        stacked_attention_mask = th.repeat_interleave(~stacked_attention_mask, self.dim_hidden, dim=-1)
-        input_embeddings.masked_fill_(stacked_attention_mask, 0)
+
+    def forward(self, data):
+        batch_size, seq_len = data['observation'].shape[0], data['observation'].shape[1]
+        
+        if self.config.use_reward:
+            inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
+        else:
+            inputs = th.cat((data['observation'], data['action']), dim=-1)
+        input_embeddings = self.embed(inputs)
+
+        if 'mask' in data:
+            stacked_attention_mask = th.unsqueeze(data['mask'], dim=-1)
+            stacked_attention_mask = th.repeat_interleave(~stacked_attention_mask, self.dim_hidden, dim=-1)
+            input_embeddings.masked_fill_(stacked_attention_mask, 0)
 
         # # swithing dimension order for batch_first=False
         # input_embeddings = th.transpose(input_embeddings, 0, 1)
 
         h_0 = th.zeros(self.num_layers, batch_size, self.dim_hidden).to(self.config.device)
         output, h_n = self.rnn(input_embeddings, h_0)
-        pred = self.fc1(output[:, -1, :])
+
+        pred = {}
+        pred_action = self.predict_action(output[:, -1, :])
+        pred['action'] = pred_action
+        if self.config.use_reward:
+            pred_reward = self.predict_reward(output[:, -1, :])
+            pred['reward'] = pred_reward
 
         return pred
-
-
-def test():
-    from run import Settings
-    config = Settings()
-    model = GPT2(config).to('cpu')
-    # model = Query(128, 128).to('cuda')
-    o = th.rand(size=(2,31,2), device='cpu', requires_grad=False)
-    a = th.rand(size=(2,31,2), device='cpu', requires_grad=False)
-    m = th.ones(size=(2,31), device='cpu', requires_grad=False)
-    p_a = model(o, a, m)
-    print(p_a)
-    # x = th.rand(size=(2,62,128), device='cuda', requires_grad=False)
-    # out = model(x)
-    # print(out)
-
-
-if __name__ == '__main__':
-    test()

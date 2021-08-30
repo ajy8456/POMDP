@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from load import get_loader
 from model import GPT2, RNN
+from loss import RegressionLoss
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
@@ -18,7 +19,7 @@ from utils import CosineAnnealingWarmUpRestarts
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 2
+    batch_size: int = 1
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -29,7 +30,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN
+    model: str = 'RNN' # GPT or RNN
     optimizer: str = 'AdamWR' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -41,6 +42,8 @@ class Settings(Serializable):
     num_layers: int = 3
 
     train_pos_en: bool = False
+    use_reward: bool = True
+    coefficient_loss: float = 0.5
 
     dropout: float = 0.0
     action_tanh: bool = False
@@ -127,8 +130,8 @@ def main():
         print(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
         return
 
-    loss_fn = th.nn.SmoothL1Loss()
-    eval_fn = th.nn.L1Loss()
+    loss_fn = RegressionLoss(config)
+    eval_fn = RegressionLoss(config)
 
     # Trainer & Evaluator
     trainer = Trainer(config=config,
@@ -165,8 +168,16 @@ def main():
         # Training one epoch
         print("Training...")
         train_loss, train_val = trainer.train(epoch)
-        logger.add_scalar('Loss/train', train_loss, epoch)
-        logger.add_scalar('Eval/train', train_val, epoch)
+
+        # Logging
+        logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
+        logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
+        if config.use_reward:
+            logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
+
+        logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
+        if config.use_reward:
+            logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
 
         # evaluating
         if epoch % config.test_eval_freq == 0:
@@ -174,8 +185,8 @@ def main():
             test_val = evaluator.eval(epoch)
 
             # save the best model
-            if test_val < best_error:
-                best_error = test_val
+            if test_val['action'] < best_error:
+                best_error = test_val['action']
 
                 save_checkpoint('Saving the best model!',
                                 os.path.join(model_dir, 'best.pth'),
@@ -185,14 +196,18 @@ def main():
                                 optimizer, 
                                 scheduler
                                 )
-            logger.add_scalar('Eval/test', test_val, epoch)
+            
+            # Logging
+            logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
+            if config.use_reward:
+                logger.add_scalar('Eval(reward)/test', test_val['reward'], epoch)
         
         # save the model
         if epoch % config.save_freq == 0:
             save_checkpoint('Saving...', 
                             os.path.join(model_dir, f'ckpt_epoch_{epoch}.pth'), 
                             epoch, 
-                            test_val, 
+                            test_val['action'], 
                             model, 
                             optimizer, 
                             scheduler

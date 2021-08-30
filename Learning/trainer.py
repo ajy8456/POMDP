@@ -13,7 +13,7 @@ class Trainer(object):
                  loader: th.utils.data.DataLoader,
                  model: th.nn.Module,
                  optimizer: th.optim.Optimizer,
-                 loss_fn: Callable[[th.Tensor, th.Tensor], th.Tensor],
+                 loss_fn: Callable[[Dict[str, th.Tensor], Dict[str, th.Tensor]], Dict[str, th.Tensor]],
                  eval_fn: Callable = None,
                  scheduler: th.optim.lr_scheduler = None
                  ):
@@ -35,28 +35,34 @@ class Trainer(object):
 
     def train(self, epoch):
         batch_time = AverageMeter('Time', ':6.3f')
-        losses = AverageMeter('Loss', ':.4e')
-        vals = AverageMeter('MAE', ':.4e')
+        losses_total = AverageMeter('Total Loss', ':.4e')
+        losses_action = AverageMeter('Action Loss', ':.4e')
+        losses_reward = AverageMeter('Reward Loss', ':.4e')
+        vals_action = AverageMeter('Action MAE', ':.4e')
+        vals_reward = AverageMeter('Reward MSE', ':.4e')
+
         progress = ProgressMeter(len(self.loader),
-                                 [batch_time, losses, vals],
+                                 [batch_time, losses_total, vals_action],
                                  prefix="Epoch: [{}]".format(epoch))
         
         self.model.train()
 
         end = time.time()
         for i, data in enumerate(self.loader):
-            observations, actions, timesteps, attn_mask = data['observation'], data['action'], data['timesteps'], data['mask']
-            target_actions = th.squeeze(data['next_action'])
+            target = {}
+            target_action = th.squeeze(data['next_action'])
+            target['action'] = target_action
+            if self.config.use_reward:
+                target_reward = th.squeeze(data['next_reward'])
+                target['reward'] = target_reward
 
-            # pred_actions = self.model(observations, actions, attn_mask)
-            pred_actions = self.model(observations, actions, timesteps, attn_mask)
+            pred = self.model(data)
 
-
-            loss = self.loss_fn(pred_actions, target_actions)
+            loss = self.loss_fn(pred, target)
 
             # Backprop + Optimize ...
             self.optim.zero_grad()
-            loss.backward()
+            loss['total'].backward()
             th.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
             self.optim.step()
 
@@ -64,21 +70,39 @@ class Trainer(object):
                 self.scheduler.step()
 
             # measure elapsed time
-            losses.update(loss.item(), data['observation'].size(0))
+            losses_total.update(loss['total'].item(), data['observation'].size(0))
+            losses_action.update(loss['action'].item(), data['observation'].size(0))
+            if self.config.use_reward:
+                losses_reward.update(loss['reward'].item(), data['observation'].size(0))
             batch_time.update(time.time() - end)
             end = time.time()
 
             if i % self.config.train_eval_freq == 0:
                 self.model.eval()
+
                 with th.no_grad():
-                    val = self.eval_fn(pred_actions, target_actions)
-                vals.update(val.item(), data['observation'].size(0))
+                    val = self.eval_fn(pred, target)
+                vals_action.update(val['action'].item(), data['observation'].size(0))
+                if self.config.use_reward:
+                    vals_reward.update(val['reward'].item(), data['observation'].size(0))
+
                 self.model.train()
 
             if i % self.config.print_freq == 0:
                 progress.display(i)
+            
+            losses = {}
+            losses['total'] = losses_total.avg
+            losses['action'] = losses_action.avg
+            if self.config.use_reward:
+                losses['reward'] = losses_reward.avg
 
-        return losses.avg, vals.avg
+            vals = {}
+            vals['action'] = vals_action.avg
+            if self.config.use_reward:
+                vals['reward'] = vals_reward.avg
+
+        return losses, vals
 
     
 class AverageMeter(object):
