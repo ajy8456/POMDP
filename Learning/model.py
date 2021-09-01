@@ -226,9 +226,11 @@ class GPT2(nn.Module):
         # get predictions
         pred = {}
         pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+        pred_action = th.squeeze(pred_action)
         pred['action'] = pred_action
         if self.config.use_reward:
             pred_reward = self.predict_reward(dec_outputs.flatten(start_dim=1))
+            pred_reward = th.squeeze(pred_reward)
             pred['reward'] = pred_reward
 
         return pred
@@ -277,9 +279,11 @@ class RNN(nn.Module):
 
         pred = {}
         pred_action = self.predict_action(output[:, -1, :])
+        pred_action = th.squeeze(pred_action)
         pred['action'] = pred_action
         if self.config.use_reward:
             pred_reward = self.predict_reward(output[:, -1, :])
+            pred_reward = th.squeeze(pred_reward)
             pred['reward'] = pred_reward
 
         return pred

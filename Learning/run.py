@@ -19,7 +19,7 @@ from utils import CosineAnnealingWarmUpRestarts
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 4096
+    batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -31,7 +31,7 @@ class Settings(Serializable):
 
     # Architecture
     model: str = 'GPT' # GPT or RNN
-    optimizer: str = 'AdamW' # AdamW or AdamWR
+    optimizer: str = 'AdamWR' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
@@ -53,33 +53,33 @@ class Settings(Serializable):
     # device: str = 'cpu'
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 100000
+    epochs: int = 10000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
     learning_rate: float = 1e-5
     weight_decay: float = 1e-4
-    warmup_step: int = int(1e4)
+    warmup_step: int = int(1e3)
     # For cosine annealing
     T_0: int = int(1e4)
-    T_mult: int = 2
-    lr_max: float = 0.1
-    lr_mult: float = 0.9
+    T_mult: int = 1
+    lr_max: float = 0.01
+    lr_mult: float = 0.5
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '8.30_woTrPos_AdamW_reward'
+    model_name: str = '9.1_400Kdata_AdamWR_reward_0.01_mult0.5_warmup1000'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
-    save_freq: int = 1000 # per epochs
+    save_freq: int = 100 # per epochs
 
 
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_10K.pickle'
-    test_filename = 'light_dark_tiny.pickle'
+    train_filename = 'light_dark_train_400K.pickle'
+    test_filename = 'light_dark_test_100K.pickle'
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
