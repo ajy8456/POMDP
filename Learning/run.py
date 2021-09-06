@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 import pickle
 import torch as th
-from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 
 from load import get_loader
 from model import GPT2, RNN
@@ -31,7 +31,7 @@ class Settings(Serializable):
 
     # Architecture
     model: str = 'GPT' # GPT or RNN
-    optimizer: str = 'AdamWR' # AdamW or AdamWR
+    optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
@@ -42,7 +42,7 @@ class Settings(Serializable):
     num_layers: int = 3
 
     train_pos_en: bool = False
-    use_reward: bool = True
+    use_reward: bool = False
     coefficient_loss: float = 1e-3
 
     dropout: float = 0.0
@@ -51,9 +51,9 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = 'ckpt_epoch_700.pth' # checkpoint file name for resuming
+    resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 1000
+    epochs: int = 10000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
@@ -68,7 +68,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.1_400Kdata_AdamWR_reward(not_pred)_0.01_mult0.5_warmup1000_GPT'
+    model_name: str = '9.6_400Kdata_AdamW_no_reward_log_grad_GPT'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -172,6 +172,7 @@ def main():
         # Logging
         logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
         logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
+        logger.add_histogram('Gradient', model.parameters.grad, epoch)
         # if config.use_reward:
         #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 
