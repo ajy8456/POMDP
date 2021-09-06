@@ -52,9 +52,9 @@ class Trainer(object):
             target = {}
             target_action = th.squeeze(data['next_action'])
             target['action'] = target_action
-            if self.config.use_reward:
-                target_reward = th.squeeze(data['next_reward'])
-                target['reward'] = target_reward
+            # if self.config.use_reward:
+            #     target_reward = th.squeeze(data['next_reward'])
+            #     target['reward'] = target_reward
 
             pred = self.model(data)
 

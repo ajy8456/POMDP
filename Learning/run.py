@@ -12,7 +12,7 @@ from loss import RegressionLoss
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
-from utils import CosineAnnealingWarmUpRestarts
+from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 
 
 @dataclass
@@ -53,7 +53,7 @@ class Settings(Serializable):
     # device: str = 'cpu'
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 10000
+    epochs: int = 1000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
@@ -85,6 +85,7 @@ def main():
     if not os.path.exists(config.exp_dir):
         os.mkdir(config.exp_dir)
     model_dir = os.path.join(config.exp_dir, config.model_name)
+
     logger = SummaryWriter(model_dir)
 
     with open(os.path.join(dataset_path, train_filename), 'rb') as f:
@@ -146,6 +147,14 @@ def main():
                           model=model,
                           eval_fn=eval_fn)
 
+    # save configuration
+    config.save(model_dir + '/config.yaml')
+    # Logging model graph
+    dummy = next(iter(test_loader))
+    for k in dummy:
+        dummy[k].to(device).detach()
+    logger.add_graph(ModelAsTuple(model), dummy)
+
     start_epoch = 1
     best_error = 10000.
 
@@ -172,7 +181,7 @@ def main():
         # Logging
         logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
         logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
-        logger.add_histogram('Gradient', model.parameters.grad, epoch)
+        log_gradients(model, logger, epoch, save_grad=True, save_param=True)
         # if config.use_reward:
         #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 

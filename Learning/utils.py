@@ -1,5 +1,16 @@
 import math
+import torch as th
 from torch.optim.lr_scheduler import _LRScheduler
+
+
+class ModelAsTuple(th.nn.Module):
+    """Workaround to avoid tracing bugs in add_graph from rejecting outputs of form Dict[Schema,Any]."""
+    def __init__(self, model: th.nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, inputs):
+        return tuple(v for (k, v) in self.model(inputs).items())
 
 
 class CosineAnnealingWarmUpRestarts(_LRScheduler):
@@ -68,3 +79,12 @@ class CosineAnnealingWarmUpRestarts(_LRScheduler):
         self.last_epoch = math.floor(epoch)
         for param_group, lr in zip(self.optimizer.param_groups, self.get_lr()):
             param_group['lr'] = lr
+
+
+def log_gradients(model, logger, step, save_grad, save_param):
+    for tag, value in model.named_parameters():
+        if value.grad is not None:
+            if save_grad:
+                logger.add_histogram(tag + "/grad", value.grad.clone().cpu(), step)
+            if save_param:
+                logger.add_histogram(tag + "/param", value.clone().cpu(), step)
