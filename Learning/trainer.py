@@ -72,8 +72,8 @@ class Trainer(object):
             # measure elapsed time
             losses_total.update(loss['total'].item(), data['observation'].size(0))
             losses_action.update(loss['action'].item(), data['observation'].size(0))
-            if self.config.use_reward:
-                losses_reward.update(loss['reward'].item(), data['observation'].size(0))
+            # if self.config.use_reward:
+            #     losses_reward.update(loss['reward'].item(), data['observation'].size(0))
             batch_time.update(time.time() - end)
             end = time.time()
 
@@ -83,8 +83,8 @@ class Trainer(object):
                 with th.no_grad():
                     val = self.eval_fn(pred, target)
                 vals_action.update(val['action'].item(), data['observation'].size(0))
-                if self.config.use_reward:
-                    vals_reward.update(val['reward'].item(), data['observation'].size(0))
+                # if self.config.use_reward:
+                #     vals_reward.update(val['reward'].item(), data['observation'].size(0))
 
                 self.model.train()
 
@@ -94,13 +94,13 @@ class Trainer(object):
             losses = {}
             losses['total'] = losses_total.avg
             losses['action'] = losses_action.avg
-            if self.config.use_reward:
-                losses['reward'] = losses_reward.avg
+            # if self.config.use_reward:
+            #     losses['reward'] = losses_reward.avg
 
             vals = {}
             vals['action'] = vals_action.avg
-            if self.config.use_reward:
-                vals['reward'] = vals_reward.avg
+            # if self.config.use_reward:
+            #     vals['reward'] = vals_reward.avg
 
         return losses, vals
 

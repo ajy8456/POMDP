@@ -51,9 +51,9 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = None # checkpoint file name for resuming
+    resume: str = 'ckpt_epoch_700.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 10000
+    epochs: int = 1000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
@@ -68,7 +68,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.1_400Kdata_AdamWR_reward_0.01_mult0.5_warmup1000'
+    model_name: str = '9.1_400Kdata_AdamWR_reward(not_pred)_0.01_mult0.5_warmup1000_GPT'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -172,12 +172,12 @@ def main():
         # Logging
         logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
         logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
-        if config.use_reward:
-            logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
+        # if config.use_reward:
+        #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 
         logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
-        if config.use_reward:
-            logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
+        # if config.use_reward:
+        #     logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
 
         # evaluating
         if epoch % config.test_eval_freq == 0:
@@ -199,8 +199,8 @@ def main():
             
             # Logging
             logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
-            if config.use_reward:
-                logger.add_scalar('Eval(reward)/test', test_val['reward'], epoch)
+            # if config.use_reward:
+            #     logger.add_scalar('Eval(reward)/test', test_val['reward'], epoch)
         
         # save the model
         if epoch % config.save_freq == 0:

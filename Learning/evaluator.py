@@ -38,9 +38,9 @@ class Evaluator():
                 target = {}
                 target_action = th.squeeze(data['next_action'])
                 target['action'] = target_action
-                if self.config.use_reward:
-                    target_reward = th.squeeze(data['next_reward'])
-                    target['reward'] = target_reward
+                # if self.config.use_reward:
+                #     target_reward = th.squeeze(data['next_reward'])
+                #     target['reward'] = target_reward
 
                 pred = self.model(data)
 
@@ -48,8 +48,8 @@ class Evaluator():
 
                 # measure elapsed time
                 vals_action.update(val['action'].item(), data['observation'].size(0))
-                if self.config.use_reward:
-                    vals_reward.update(val['reward'].item(), data['observation'].size(0))
+                # if self.config.use_reward:
+                #     vals_reward.update(val['reward'].item(), data['observation'].size(0))
                 batch_time.update(time.time() - end)
                 end = time.time()
 
@@ -58,7 +58,7 @@ class Evaluator():
 
             vals = {}
             vals['action'] = vals_action.avg
-            if self.config.use_reward:
-                vals['reward'] = vals_reward.avg
+            # if self.config.use_reward:
+            #     vals['reward'] = vals_reward.avg
 
         return vals

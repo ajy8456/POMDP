@@ -175,7 +175,7 @@ class GPT2(nn.Module):
         # self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
         if self.config.use_reward:
             self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
-            self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
+            # self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
         else:
             self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
 
@@ -228,10 +228,10 @@ class GPT2(nn.Module):
         pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
         pred_action = th.squeeze(pred_action)
         pred['action'] = pred_action
-        if self.config.use_reward:
-            pred_reward = self.predict_reward(dec_outputs.flatten(start_dim=1))
-            pred_reward = th.squeeze(pred_reward)
-            pred['reward'] = pred_reward
+        # if self.config.use_reward:
+        #     pred_reward = self.predict_reward(dec_outputs.flatten(start_dim=1))
+        #     pred_reward = th.squeeze(pred_reward)
+        #     pred['reward'] = pred_reward
 
         return pred
 
@@ -249,7 +249,7 @@ class RNN(nn.Module):
 
         if self.config.use_reward:
             self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
-            self.predict_reward = nn.Linear(self.dim_hidden, self.dim_reward)
+            # self.predict_reward = nn.Linear(self.dim_hidden, self.dim_reward)
         else:
             self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         
@@ -281,9 +281,9 @@ class RNN(nn.Module):
         pred_action = self.predict_action(output[:, -1, :])
         pred_action = th.squeeze(pred_action)
         pred['action'] = pred_action
-        if self.config.use_reward:
-            pred_reward = self.predict_reward(output[:, -1, :])
-            pred_reward = th.squeeze(pred_reward)
-            pred['reward'] = pred_reward
+        # if self.config.use_reward:
+        #     pred_reward = self.predict_reward(output[:, -1, :])
+        #     pred_reward = th.squeeze(pred_reward)
+        #     pred['reward'] = pred_reward
 
         return pred
