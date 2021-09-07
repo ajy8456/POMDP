@@ -154,7 +154,7 @@ class GPT2DecoderLayer(nn.Module):
         ffn_out = self.ffn(self_attn_out)
         ffn_outputs = self.layer_norm2(self_attn_out + ffn_out)
 
-        return ffn_out, self_attn_prob
+        return ffn_outputs, self_attn_prob
 
 
 class GPT2(nn.Module):
@@ -178,6 +178,7 @@ class GPT2(nn.Module):
             # self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
         else:
             self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+    
 
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
@@ -204,7 +205,7 @@ class GPT2(nn.Module):
             inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
         else:
             inputs = th.cat((data['observation'], data['action']), dim=-1)
-        input_embeddings = self.embed(inputs)
+        input_embeddings = F.gelu(self.embed(inputs))
         
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
@@ -212,7 +213,6 @@ class GPT2(nn.Module):
             input_embeddings = input_embeddings + time_embeddings
         else:
             input_embeddings = self.pos_embed(input_embeddings)
-            input_embeddings = self.ln(input_embeddings)
 
         if 'mask' not in data:
             # attention mask for GPT: 1 if can be attended to, 0 if not

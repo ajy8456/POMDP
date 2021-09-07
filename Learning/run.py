@@ -68,7 +68,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.6_400Kdata_AdamW_no_reward_log_grad_GPT'
+    model_name: str = '9.6_400Kdata_AdamW_no_reward_log_grad_GPT_LN_modified_LN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs

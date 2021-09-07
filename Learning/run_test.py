@@ -15,14 +15,14 @@ from torch.utils.data import Dataset, DataLoader, Sampler
 
 # from load import get_loader
 from saver import save_checkpoint, load_checkpoint
-from utils import CosineAnnealingWarmUpRestarts
+from utils import CosineAnnealingWarmUpRestarts, log_gradients
 
 
 @dataclass
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    batch_size: int = 2 # 100steps/epoch
+    batch_size: int = 4 # 100steps/epoch
     shuffle: bool = True
     max_len: int = 100
     seq_len: int = 31
@@ -30,7 +30,7 @@ class Settings(Serializable):
     dim_data: int = 1
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
+    model: str = 'GPT' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -66,7 +66,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test_RNN'
+    model_name: str = '9.6_log_grad_test_GPT'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 1 # per epochs
@@ -286,7 +286,7 @@ class GPT2DecoderLayer(nn.Module):
         ffn_out = self.ffn(self_attn_out)
         ffn_outputs = self.layer_norm2(self_attn_out + ffn_out)
 
-        return ffn_out, self_attn_prob
+        return ffn_outputs, self_attn_prob
 
 
 class GPT2(nn.Module):
@@ -330,7 +330,6 @@ class GPT2(nn.Module):
             input_embeddings = input_embeddings + time_embeddings
         else:
             input_embeddings = self.pos_embed(input_embeddings)
-            input_embeddings = self.ln(input_embeddings)
 
         if 'mask' not in data:
             # attention mask for GPT: 1 if can be attended to, 0 if not
@@ -664,6 +663,7 @@ def main():
         # Logging
         logger.add_scalar('Loss', train_loss, epoch)
         logger.add_scalar('Eval/train', train_val, epoch)
+        log_gradients(model, logger, epoch, save_grad=True, save_param=True)
 
         # evaluating
         if epoch % config.test_eval_freq == 0:
