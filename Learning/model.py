@@ -194,6 +194,8 @@ class GPT2(nn.Module):
         # |NOTE| need!!!! https://michigusa-nlp.tistory.com/26
         self.layers = nn.ModuleList(self.layers)
 
+        # self.ln2 = nn.LayerNorm(self.dim_hidden)
+
         self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
     # def forward(self, observations, actions, attn_mask=None):
@@ -222,6 +224,8 @@ class GPT2(nn.Module):
         dec_outputs, attn_prob = self.layers[0](input_embeddings, attn_mask)
         for layer in self.layers[1:]:
             dec_outputs, attn_prob = layer(dec_outputs, attn_mask)
+
+        # dec_outputs = self.ln2(dec_outputs)
 
         # get predictions
         pred = {}

@@ -51,7 +51,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = None # checkpoint file name for resuming
+    resume: str = 'ckpt_epoch_100.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
 
@@ -68,10 +68,10 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.6_400Kdata_AdamW_no_reward_log_grad_GPT_LN_modified_LN'
+    model_name: str = '9.7_400Kdata_AdamW_no_reward_GPT_modify_LN_zeropadAction'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
-    test_eval_freq: int = 1 # per epochs
+    test_eval_freq: int = 10 # per epochs
     save_freq: int = 100 # per epochs
 
 
