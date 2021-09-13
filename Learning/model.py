@@ -57,26 +57,53 @@ class PositionalEncoding(nn.Module):
 class Attention(nn.Module):
     def __init__(self, config):
         super(Attention, self).__init__()
+        self.config = config
+        self.dropout = nn.Dropout(config.dropout)
     
     def forward(self, Q, K, V, attn_mask=None):
         """
         Attention(Q, K, V) = norm(QK)V
         """
+
+        # if self.config.print_in_out:
+        #     print("Input of Attention Q:", Q)
+        #     print("Input of Attention K:", K)
+        #     print("Input of Attention V:", V)
+
         a = th.matmul(Q, K.transpose(-1,-2).float())
+
+        # if self.config.print_in_out:
+        #     print("Output of a:", a)
+
         a /= th.sqrt(th.tensor(Q.shape[-1]).float()) # scaled
+
+        # if self.config.print_in_out:
+        #     print("After scaled:", a)
         
         # Mask(opt.)
         if attn_mask is not None:
             a.masked_fill_(attn_mask, -1e9)
 
+        # if self.config.print_in_out:
+        #     print("After masked:", a)
+
         attn_p = th.softmax(a, -1) # (num_q_seq, num_k_seq)
-        attn_v = th.matmul(a, V) # (num_q_seq, dim_hidden)
+
+        # if self.config.print_in_out:
+        #     print("Attention score:", attn_p)
+
+        attn_v = th.matmul(self.dropout(attn_p), V) # (num_q_seq, dim_hidden)
+
+        # if self.config.print_in_out:
+        #     print("Attention value:", attn_v)
+
         return attn_v, attn_p
     
 
 class MultiHeadAttention(th.nn.Module):
     def __init__(self, config):
         super(MultiHeadAttention, self).__init__()
+        self.config = config
         self.dim_hidden = config.dim_hidden
         self.dim_head = config.dim_head
         self.num_heads = config.num_heads
@@ -90,12 +117,27 @@ class MultiHeadAttention(th.nn.Module):
     
     def forward(self, x, attn_mask=None):
         batch_size = x.shape[0]
+
+        # if self.config.print_in_out:
+        #     print("Input of MultiHeadAttention:", x)
+
         # (batch_size, num_heads, num_q_seq, dim_head)
         q_s = self.W_Q(x).view(batch_size, -1, self.num_heads, self.dim_head).transpose(1,2)
+
+        # if self.config.print_in_out:
+        #     print("Query:", q_s)
+
         # (batch_size, num_heads, num_k_seq, dim_head)
         k_s = self.W_K(x).view(batch_size, -1, self.num_heads, self.dim_head).transpose(1,2)
+
+        # if self.config.print_in_out:
+        #     print("Key:", k_s)
+
         # (batch_size, num_heads, num_v_seq, dim_head)
         v_s = self.W_V(x).view(batch_size, -1, self.num_heads, self.dim_head).transpose(1,2)
+
+        # if self.config.print_in_out:
+        #     print("Value:", v_s)
 
         # |TODO| check
         # (batch_size, num_heads, num_q_seq, n_k_seq)
@@ -103,12 +145,21 @@ class MultiHeadAttention(th.nn.Module):
             attn_mask = attn_mask.unsqueeze(1).repeat(1, self.num_heads, 1, 1).transpose(0,1)
 
         # |TODO| check shape
-        # (batch_size, num_heads, num_q_seq, dim_head), (batch_size, num_heads, num_q_seq, num_k_seq)
+        # (batch_size, num_heads, num_q_seq, dim_head), (batch_size, num_heads, num_q_seq, num_k_seq
         attn_v, attn_p = self.scaled_dot_attn(q_s, k_s, v_s, attn_mask)
+
+        # if self.config.print_in_out:
+        #     print("Output of Attention value:", attn_v)
+        #     print("Output of Attention score:", attn_p)
+
         # (batch_size, num_heads, num_q_seq, num_heads * dim_head)
         attn_v = attn_v.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.dim_head)
         # (batch_size, num_q_seq, dim_hidden)
         output = self.fc1(attn_v)
+        
+        # if self.config.print_in_out:
+        #     print("Output of FC1:", output)
+
         output = self.dropout(output)
 
         # (batch_size, num_q_seq, dim_hidden), (batch_size, num_heads, num_q_seq, num_k_seq)
@@ -147,12 +198,30 @@ class GPT2DecoderLayer(nn.Module):
     
     def forward(self, x, attn_mask):
         # (batch_size, num_dec_seq, dim_hidden), (batch_size, num_heads, num_dec_seq, num_dec_seq)
+
+        # if self.config.print_in_out:
+        #     print("Input of MultiHeadAttention:", x, attn_mask)
+
         self_attn_out, self_attn_prob = self.self_attn(x, attn_mask)
+
+        # if self.config.print_in_out:
+        #     print("Output of MultiHeadAttention:", self_attn_out, self_attn_prob)
+
         self_attn_out = self.layer_norm1(x + self_attn_out)
+
+        # if self.config.print_in_out:
+        #     print("Output of LN1:", self_attn_out)
 
         # (batch_size, num_dec_seq, dim_hidden)
         ffn_out = self.ffn(self_attn_out)
+
+        # if self.config.print_in_out:
+        #     print("Output of FFN:", ffn_out)
+
         ffn_outputs = self.layer_norm2(self_attn_out + ffn_out)
+
+        # if self.config.print_in_out:
+        #     print("Output of LN2:", ffn_out)
 
         return ffn_outputs, self_attn_prob
 
@@ -174,10 +243,16 @@ class GPT2(nn.Module):
         # self.embed_observation = nn.Linear(self.dim_observation, self.dim_embed)
         # self.embed_action = nn.Linear(self.dim_action, self.dim_embed)
         if self.config.use_reward:
-            self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
             # self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
         else:
-            self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
     
 
         # select trainable/fixed positional encoding
@@ -207,7 +282,18 @@ class GPT2(nn.Module):
             inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
         else:
             inputs = th.cat((data['observation'], data['action']), dim=-1)
+        
+        if self.config.use_mask_padding:
+            mask = th.unsqueeze(data['mask'].float(), dim=-1)
+            inputs = th.cat((inputs, mask), dim=-1)
+
+        # if self.config.print_in_out:
+        #     print("Input of embedding:", inputs)
+
         input_embeddings = F.gelu(self.embed(inputs))
+
+        # if self.config.print_in_out:
+        #     print("Output of embedding:", input_embeddings)
         
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
@@ -216,22 +302,43 @@ class GPT2(nn.Module):
         else:
             input_embeddings = self.pos_embed(input_embeddings)
 
-        if 'mask' not in data:
-            # attention mask for GPT: 1 if can be attended to, 0 if not
-            attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
+        # if 'mask' not in data:
+        #     # attention mask for GPT: 1 if can be attended to, 0 if not
+        #     attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
         attn_mask = ~data['mask']
 
+        # if self.config.print_in_out:
+        #     print("Input of 1-th GPT2DecoderLayer:", input_embeddings)
+
         dec_outputs, attn_prob = self.layers[0](input_embeddings, attn_mask)
-        for layer in self.layers[1:]:
+
+        # if self.config.print_in_out:
+        #     print("Output of 1-th GPT2DecoderLayer:", dec_outputs)
+
+        for l, layer in enumerate(self.layers[1:]):
+
+            # if self.config.print_in_out:
+            #     print(f"Input of {l+2}-th GPT2DecoderLayer:", dec_outputs)
+
             dec_outputs, attn_prob = layer(dec_outputs, attn_mask)
+
+            # if self.config.print_in_out:
+            #     print(f"Output of {l+2}-th GPT2DecoderLayer:", dec_outputs)
 
         # dec_outputs = self.ln2(dec_outputs)
 
         # get predictions
+        # if self.config.print_in_out:
+            # print(f"Input of action predict FC:", dec_outputs)
+
         pred = {}
         pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
         pred_action = th.squeeze(pred_action)
         pred['action'] = pred_action
+
+        # if self.config.print_in_out:
+        #     print(f"Output of action predict FC:", pred_action)
+
         # if self.config.use_reward:
         #     pred_reward = self.predict_reward(dec_outputs.flatten(start_dim=1))
         #     pred_reward = th.squeeze(pred_reward)
@@ -252,10 +359,16 @@ class RNN(nn.Module):
         self.num_layers = config.num_layers
 
         if self.config.use_reward:
-            self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
-            # self.predict_reward = nn.Linear(self.dim_hidden, self.dim_reward)
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
+            # self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
         else:
-            self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         
         self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
         self.predict_action = nn.Linear(self.dim_hidden, self.dim_action)
@@ -268,6 +381,11 @@ class RNN(nn.Module):
             inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
         else:
             inputs = th.cat((data['observation'], data['action']), dim=-1)
+
+        if self.config.use_mask_padding:
+            mask = th.unsqueeze(data['mask'].float(), dim=-1)
+            inputs = th.cat((inputs, mask), dim=-1)
+            
         input_embeddings = self.embed(inputs)
 
         if 'mask' in data:
@@ -291,3 +409,74 @@ class RNN(nn.Module):
         #     pred['reward'] = pred_reward
 
         return pred
+
+
+class LSTM(nn.Module):
+    def __init__(self, config):
+        super(LSTM, self).__init__()
+        self.config = config
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_reward = config.dim_reward
+        self.dim_embed = config.dim_embed
+        self.dim_hidden = config.dim_hidden
+        self.num_layers = config.num_layers
+
+        if self.config.use_reward:
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + self.dim_reward, self.dim_embed)
+            # self.predict_reward = nn.Linear(self.seq_len * self.dim_hidden, self.dim_reward)
+        else:
+            if self.config.use_mask_padding:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action + 1, self.dim_embed)
+            else:
+                self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
+        
+        self.lstm = nn.LSTM(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.predict_action = nn.Linear(self.dim_hidden, self.dim_action)
+
+
+    def forward(self, data):
+        batch_size, seq_len = data['observation'].shape[0], data['observation'].shape[1]
+        
+        if self.config.use_reward:
+            inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
+        else:
+            inputs = th.cat((data['observation'], data['action']), dim=-1)
+
+        if self.config.use_mask_padding:
+            mask = th.unsqueeze(data['mask'].float(), dim=-1)
+            inputs = th.cat((inputs, mask), dim=-1)
+            
+        input_embeddings = self.embed(inputs)
+
+        if 'mask' in data:
+            stacked_attention_mask = th.unsqueeze(data['mask'], dim=-1)
+            stacked_attention_mask = th.repeat_interleave(~stacked_attention_mask, self.dim_hidden, dim=-1)
+            input_embeddings.masked_fill_(stacked_attention_mask, 0)
+
+        # # swithing dimension order for batch_first=False
+        # input_embeddings = th.transpose(input_embeddings, 0, 1)
+
+        h_0 = th.zeros(self.num_layers, batch_size, self.dim_hidden).to(self.config.device)
+        c_0 = th.zeros(self.num_layers, batch_size, self.dim_hidden).to(self.config.device)
+        output, h_n = self.lstm(input_embeddings, (h_0, c_0))
+
+        pred = {}
+        pred_action = self.predict_action(output[:, -1, :])
+        pred_action = th.squeeze(pred_action)
+        pred['action'] = pred_action
+        # if self.config.use_reward:
+        #     pred_reward = self.predict_reward(output[:, -1, :])
+        #     pred_reward = th.squeeze(pred_reward)
+        #     pred['reward'] = pred_reward
+
+        return pred
+
+
+if __name__ == '__main__':
+    from torchsummary import summary
+    from run import Settings
+    config = Settings()

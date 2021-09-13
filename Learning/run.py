@@ -7,7 +7,7 @@ import torch as th
 from tensorboardX import SummaryWriter
 
 from load import get_loader
-from model import GPT2, RNN
+from model import GPT2, RNN, LSTM
 from loss import RegressionLoss
 from trainer import Trainer
 from evaluator import Evaluator
@@ -19,8 +19,11 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
+    train_file: str = 'light_dark_train_400K.pickle'
+    test_file: str = 'light_dark_test_100K.pickle'
     batch_size: int = 4096 # 100steps/epoch
-    shuffle: bool = True
+    shuffle: bool = True # for using Sampler, it should be False
+    use_sampler: bool = False
     max_len: int = 100
     seq_len: int = 31
     # |TODO| modify to automatically change
@@ -30,7 +33,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN
+    model: str = 'GPT' # GPT or RNN or LSTM
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -42,7 +45,8 @@ class Settings(Serializable):
     num_layers: int = 3
 
     train_pos_en: bool = False
-    use_reward: bool = False
+    use_reward: bool = True
+    use_mask_padding: bool = True
     coefficient_loss: float = 1e-3
 
     dropout: float = 0.0
@@ -51,7 +55,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = 'ckpt_epoch_100.pth' # checkpoint file name for resuming
+    resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
 
@@ -68,18 +72,20 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.7_400Kdata_AdamW_no_reward_GPT_modify_LN_zeropadAction'
+    model_name: str = '9.13_400Kdata_GPT_debug'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
     save_freq: int = 100 # per epochs
 
+    print_in_out: bool = False
+
 
 def main():
     config = Settings()
     # |TODO| go to Setting()
-    train_filename = 'light_dark_train_400K.pickle'
-    test_filename = 'light_dark_test_100K.pickle'
+    train_filename = config.train_file
+    test_filename = config.test_file
     dataset_path = os.path.join(os.getcwd(), config.path)
     
     if not os.path.exists(config.exp_dir):
@@ -106,15 +112,17 @@ def main():
         model = GPT2(config).to(device)
     elif config.model == 'RNN':
         model = RNN(config).to(device)
+    elif config.model == 'LSTM':
+        model = LSTM(config).to(device)
     else:
-        # |FIXME| using error?exception?logging?
-        print(f'"{config.model}" is not support!! You should select "GPT" or "RNN".')
-        return
+        raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')
 
+    # optimizer
     optimizer = th.optim.AdamW(model.parameters(),
                                lr=config.learning_rate,
                                weight_decay=config.weight_decay)
     
+    # learning rate scheduler
     if config.optimizer == 'AdamW':
         scheduler = th.optim.lr_scheduler.LambdaLR(optimizer, lambda step: min((step+1)/config.warmup_step, 1))
     elif config.optimizer == 'AdamWR':
@@ -127,10 +135,9 @@ def main():
             gamma=config.lr_mult
         )
     else:
-        # |FIXME| using error?exception?logging?
-        print(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
-        return
+        raise Exception(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
 
+    # Metric
     loss_fn = RegressionLoss(config)
     eval_fn = RegressionLoss(config)
 
@@ -166,10 +173,7 @@ def main():
             start_epoch += 1
             print("Loaded checkpoint '{}' (epoch {})".format(config.resume, start_epoch))
         else:
-            # |FIXME| using error?exception?logging?
-            print("No checkpoint found at '{}'".format(config.resume))
-            return
-
+            raise Exception("No checkpoint found at '{}'".format(config.resume))
 
     for epoch in range(start_epoch, config.epochs+1):
         print(f'===== Start {epoch} epoch =====')
