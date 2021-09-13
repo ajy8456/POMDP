@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import torch as th
 from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
-from torch.utils.data import Dataset, DataLoader, Sampler
+from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
 
 
 class LightDarkDataset(Dataset):
@@ -24,18 +24,23 @@ class LightDarkDataset(Dataset):
         self.dim_state = config.dim_state
         self.dim_reward = config.dim_reward
 
+        # for WeightedRandomSampler
+        self.p_sample = dataset['p_sample']
+
     def __len__(self):
-        return len(self.dataset['observation'])
+        return len(self.dataset['traj_len'])
 
     def __getitem__(self, index):
         observation = self.dataset['observation'][index]
         action = self.dataset['action'][index]
         reward = self.dataset['reward'][index]
         next_state = self.dataset['next_state'][index]
+        traj_len = self.dataset['traj_len'][index]
         sample = {'observation': observation,
                   'action': action,
                   'reward': reward,
-                  'next_state': next_state}
+                  'next_state': next_state,
+                  'traj_len': traj_len}
         
         if self.transform:
             sample = self.transform(sample)
@@ -98,26 +103,14 @@ class BatchMaker():
         return out
 
 
-class TimeStepSampler(Sampler):
-    '''
-    Sampling trajectories based on #timesteps instead of #trajectories.
-    '''
-    def __init__(self, dataset: Dict):
-        self.dataset = dataset
-        self.p_sample = dataset['traj_lens']/sum(dataset['traj_lens'])
-    
-    def __len__(self):
-        return len(self.dataset['observation'])
-    
-    def __iter__(self):
-        # |TODO| how to use __len__()?
-        index = np.random.choice(np.arange(len(self.dataset['observation'])), replace=True, p=self.p_sample)
-        yield index
-
-
 def get_loader(config, dataset: Dict,
                transform=None, collate_fn=None):
     dataset = LightDarkDataset(config, dataset, transform)
+
+    if config.use_sampler:
+        sampler = WeightedRandomSampler(dataset.p_sample, config.batch_size)
+    else:
+        sampler = None
 
     if collate_fn == None:
         batcher = BatchMaker(config)
@@ -125,5 +118,6 @@ def get_loader(config, dataset: Dict,
     loader = DataLoader(dataset,
                         batch_size=config.batch_size,
                         shuffle=config.shuffle,
+                        sampler=sampler,
                         collate_fn=batcher)
     return loader

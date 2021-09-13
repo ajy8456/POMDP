@@ -51,13 +51,12 @@ for k in range(len(data)): # about all pickle
             tmp_observation.append(data[k][i][j][1])
             tmp_next_state.append(data[k][i][j][2])
             tmp_reward.append(data[k][i][j][3])
-            tmp_traj_len.append(len(data[k][i][j][1]))
 
         action.append(np.asarray(tmp_action))
         observation.append(np.asarray(tmp_observation))
         next_state.append(np.asarray(tmp_next_state))
         reward.append(np.asarray(tmp_reward))
-        traj_len.append(tmp_traj_len)
+        traj_len.append(len(data[k][i]))
 
 
 print('#total traj.:', len(action))
