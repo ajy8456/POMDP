@@ -33,7 +33,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'LSTM' # GPT or RNN or LSTM
+    model: str = 'GPT' # GPT or RNN or LSTM
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -54,7 +54,6 @@ class Settings(Serializable):
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    # device: str = 'cpu'
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 100
@@ -72,12 +71,16 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.14_10Kdata_LSTM_log_eff_grad'
+    model_name: str = 'test'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
     save_freq: int = 100 # per epochs
 
+    log_para: bool = False
+    log_grad: bool = False
+    eff_grad: bool = False
+    print_num_para: bool = False
     print_in_out: bool = False
 
 
@@ -185,7 +188,7 @@ def main():
         # Logging
         logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
         logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
-        log_gradients(model, logger, epoch, save_grad=True, save_param=True)
+        log_gradients(model, logger, epoch, log_grad=config.log_grad, log_param=config.log_para, eff_grad=config.eff_grad, print_num_para=config.print_num_para)
         # if config.use_reward:
         #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 

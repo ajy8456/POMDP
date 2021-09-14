@@ -81,18 +81,33 @@ class CosineAnnealingWarmUpRestarts(_LRScheduler):
             param_group['lr'] = lr
 
 
-def log_gradients(model, logger, step, save_grad, save_param):
+def log_gradients(model, logger, step, log_grad, log_param, eff_grad, print_num_para):
+    
+    cnt_para = 0
+    
     for tag, value in model.named_parameters():
         if value.grad is not None:
-            if save_grad:
-                filt_1 = th.where(value.grad>1e-5, True, False)
-                filt_2 = th.where(value.grad<-1e-5, True, False)
-                filt = th.logical_or(filt_1, filt_2)
-                eff_grad = value.grad[filt].clone().cpu()
-                if eff_grad.tolist():
-                    logger.add_histogram(tag + "/grad", eff_grad, step)
+
+            cnt_para += th.numel(value.grad)
+            
+            if log_grad:
+                if eff_grad:
+                    filt_1 = th.where(value.grad>1e-5, True, False)
+                    filt_2 = th.where(value.grad<-1e-5, True, False)
+                    filt = th.logical_or(filt_1, filt_2)
+                    eff_grad = value.grad[filt].clone().cpu()
+                    if eff_grad.tolist():
+                        logger.add_histogram(tag + "/grad", eff_grad, step)
+                    else:
+                        # |FIXME| How to log no data?
+                        logger.add_histogram(tag + "/grad", th.zeros(1).cpu(), step)
                 else:
-                    # |FIXME| How to log no data?
-                    logger.add_histogram(tag + "/grad", th.zeros(1).cpu(), step)
-            if save_param:
+                    logger.add_histogram(tag + "/grad", value.grad.clone().cpu(), step)
+
+            if log_param:
                 logger.add_histogram(tag + "/param", value.clone().cpu(), step)
+            
+            if print_num_para:
+                print(f"#Trainable parameters of {tag}", th.numel(value.grad))
+    if print_num_para:
+        print("#Total trainable parameters:", cnt_para)

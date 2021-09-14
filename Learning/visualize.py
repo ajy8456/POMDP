@@ -70,8 +70,8 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name_GPT: str = '9.10_10Kdata_maskpad_GPT'
-    model_name_RNN: str = '9.10_10Kdata_maskpad_RNN'
+    model_name_GPT: str = '9.13_400Kdata_GPT_debug'
+    model_name_RNN: str = '9.10_400Kdata_maskpad_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
