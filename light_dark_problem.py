@@ -607,12 +607,12 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 10
-    num_particles = 100
+    num_planning = 20
+    num_particles = 1000
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','long_5')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -653,7 +653,6 @@ def main():
         # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
         light_dark_problem.agent.set_belief(init_belief)
 
-
         # set planner
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
                         discount_factor=discont_factor, exploration_const=math.sqrt(2),
@@ -678,6 +677,10 @@ def main():
                 print("Inital belief state expectation:", expectation_belief(light_dark_problem.agent.cur_belief))
                 # print("Inital belief state: %s" % str(light_dark_problem.agent.cur_belief))
                 print("Number of particles:", len(light_dark_problem.agent.cur_belief))
+
+                # initial history
+                init_observation = light_dark_problem.agent._observation_model.sample(light_dark_problem.env.state, (0,0))
+                light_dark_problem.agent.update_history((0,0), init_observation.position, light_dark_problem.env.state.position, 0)
 
                 if plotting:
                     viz.log_state(light_dark_problem.env.state)
@@ -709,6 +712,10 @@ def main():
                 reward = -1
 
             total_reward = reward + discont_factor*total_reward
+
+            # |TODO| how to move in planner.update? need to resolve "TODO" for reward
+            # update history
+            light_dark_problem.agent.update_history(best_action, real_observation.position, next_state.position, total_reward)
 
             print("Action: %s" % str(best_action))
             print("Observation: %s" % real_observation)

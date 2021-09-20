@@ -98,16 +98,12 @@ class POMCPOW(Planner):
             # print("call _simulate()")
             # ################################################################
 
-            # # remember excuted history
-            # total_reward = self._simulate(state, self._agent.history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
-            # don't remember excuted history
-            simulate_history = ()
-            
-            # sampling inital observation according to zero-action
-            init_observation = self._agent._observation_model.sample(state, (0,0))
-            simulate_history += (((0,0), init_observation.position, state.position, 0), )
+            # contain excuted history
+            simulate_history = agent.history
+            # init_observation = agent._observation_model.sample(state, (0,0))
+            # simulate_history = (((0,0), init_observation.position, state.position, 0),)
 
-            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data, guide=guide, rollout_guide=rollout_guide)
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_data=save_data, guide=guide, rollout_guide=rollout_guide)
 
             # ################################################################
             # print(f"=============End Simulation: {sims_count}=================")
@@ -157,6 +153,7 @@ class POMCPOW(Planner):
                 _action, inference_time = self._agent._policy_model.sample(history)
             else:
                 _action = self._NextAction(state)
+
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
@@ -441,8 +438,9 @@ class POMCPOW(Planner):
             print("Warning: agent does not have tree. Have you planned yet?")
             return
         
-        # Update history
-        agent.update_history(real_action, real_observation.position)
+
+        # |TODO| From now, move to light_dark_problem.py / how to combine?
+        # agent.update_history(real_action, real_observation.position, next_state, real_reward)
 
         # |FIXME| create new root node
         if agent.tree[real_action][real_observation] is None:

@@ -366,8 +366,8 @@ class Agent:
         """
         return self._history
 
-    def update_history(self, real_action, real_observation):
-        self._history += ((real_action, real_observation),)
+    def update_history(self, real_action, real_observation, real_next_state, real_reward):
+        self._history += ((real_action, real_observation, real_next_state, real_reward),)
 
     @property
     def init_belief(self):
