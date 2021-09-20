@@ -327,7 +327,6 @@ class PolicyModel:
         pass
 
 
-
 class Agent:
     """ An Agent operates in an environment by taking actions, receiving observations, and updating its belief.
     The Agent supplies the class:`TransitionModel`, class:`ObservationModel`, class:`RewardModel`, or class:`BlackboxModel` to the planner or the belief update algorithm.

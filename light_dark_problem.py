@@ -11,7 +11,9 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import time
 import pickle
-    
+
+from policy import Settings, NNRegressionPolicyModel
+
 
 class State(State):
     """The state of the problem is just the robot position"""
@@ -40,7 +42,6 @@ class State(State):
     
     def __repr__(self):
         return "State(%s)" % (str(self.position))
-
 
 
 class Action(Action):
@@ -356,12 +357,22 @@ class LightDarkEnvironment(Environment):
 
 
 class LightDarkProblem(POMDP):
-    def __init__(self, init_state, init_belief, goal_state, light, const):
-        agent = Agent(init_belief,
-                      PolicyModel(),
+    def __init__(self, init_state, init_belief, goal_state, light, const, guide=False):
+        if guide:
+            nn_config = Settings()
+            guide_policy = NNRegressionPolicyModel(nn_config)
+            agent = Agent(init_belief,
+                      guide_policy,
                       TransitionModel(),
                       ObservationModel(light,const),
                       RewardModel(light, goal_state))
+        else:
+            agent = Agent(init_belief,
+                        PolicyModel(),
+                        TransitionModel(),
+                        ObservationModel(light,const),
+                        RewardModel(light, goal_state))
+
         env = LightDarkEnvironment(init_state,                  # init state
                                    light,                       # light
                                    const,                       # const
@@ -588,17 +599,20 @@ class LightDarkViz:
 
 def main():
     plotting = False
-    save_data = True
+    save_data = False
     save_log = False
+
+    guide = False
+    rollout_guide = False
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 4
-    num_particles = 1000
+    num_planning = 10
+    num_particles = 100
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','sim1K_3')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','sim')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -635,7 +649,7 @@ def main():
         discont_factor = 0.9
         
         # creates POMDP model
-        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const)
+        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, guide)
         # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
         light_dark_problem.agent.set_belief(init_belief)
 
@@ -671,7 +685,7 @@ def main():
 
             print("==== Step %d ====" % (i+1))
 
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging, save_data)
+            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging, save_data, guide, rollout_guide)
 
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
@@ -733,7 +747,7 @@ def main():
                 
                 # Saving success history
                 if save_data:
-                    with open(os.path.join(save_dir, 'simulation_history_data_success.pickle'), 'ab') as f:
+                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
                         pickle.dump(planner.history_data, f)
                 
                 break
@@ -755,10 +769,9 @@ def main():
 
                 # Saving fail history
                 if save_data:
-                    with open(os.path.join(save_dir, 'simulation_history_data_fail.pickle'), 'ab') as f:
+                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
                         pickle.dump(planner.history_data, f)
             
-
         if plotting:
             viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
                                     1: [(0,0,0), (255,0,0)]},

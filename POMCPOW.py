@@ -71,7 +71,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon, logging=False, save_data=False):
+    def plan(self, agent, horizon, logging=False, save_data=False, guide=False, rollout_guide=False):
         # Only works if the agent's belief is particles
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -107,8 +107,7 @@ class POMCPOW(Planner):
             init_observation = self._agent._observation_model.sample(state, (0,0))
             simulate_history += (((0,0), init_observation.position, state.position, 0), )
 
-            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data)
-
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, 0, logging=logging, save_data=save_data, guide=guide, rollout_guide=rollout_guide)
 
             # ################################################################
             # print(f"=============End Simulation: {sims_count}=================")
@@ -151,10 +150,13 @@ class POMCPOW(Planner):
         _action = (_action_x,_action_y)
         return _action
 
-    def _ActionProgWiden(self, vnode, history, state, k_a=2, alpha_a=1/2):
+    def _ActionProgWiden(self, vnode, history, state, traj, guide, k_a=2, alpha_a=1/2):
         _history = vnode
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
-            _action = self._NextAction(state)
+            if guide:
+                _action, inference_time = self._agent._policy_model.sample(history)
+            else:
+                _action = self._NextAction(state)
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
                 vnode[_action] = history_action_node
@@ -167,7 +169,7 @@ class POMCPOW(Planner):
 
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, save_data, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, save_data, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
@@ -188,7 +190,8 @@ class POMCPOW(Planner):
         # print("call _ActionProgWiden()")
         # ################################################################
 
-        action = self._ActionProgWiden(vnode=root, history=history, state=state)
+        traj = None
+        action = self._ActionProgWiden(vnode=root, history=history, state=state, traj=traj, guide=guide)
 
         # ################################################################
         # print(f"return _ucb() & _ActionProgWiden(): action {action}")
@@ -250,7 +253,7 @@ class POMCPOW(Planner):
             # print("call _rollout()")
             # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data, traj=traj, rollout_guide=rollout_guide)
 
         else:
             # |NOTE| append s` to B(hao)
@@ -300,7 +303,9 @@ class POMCPOW(Planner):
                                                                             observation,
                                                                             depth+nsteps,
                                                                             logging=logging,
-                                                                            save_data=save_data)
+                                                                            save_data=save_data,
+                                                                            guide=guide,
+                                                                            rollout_guide=rollout_guide)
         
             # ################################################################
             # print("return nested _simulate()")
@@ -320,12 +325,15 @@ class POMCPOW(Planner):
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging, save_data): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, save_data, traj, rollout_guide=False): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
 
         while depth < self._max_depth:
-            action = self._NextAction(state)
+            if rollout_guide:
+                action, _ = self._agent._policy_model.sample(history)
+            else:
+                action = self._NextAction(state)
             next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
             if logging:
