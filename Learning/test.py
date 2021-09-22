@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 path: str = 'Learning/dataset'
 dataset_path = os.path.join(os.getcwd(), path)
-dataset_filename = 'light_dark_10K.pickle'
+dataset_filename = 'light_dark_long_mini.pickle'
 
 # with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
 #     dataset = pickle.load(f)
@@ -46,5 +46,5 @@ dataset_filename = 'light_dark_10K.pickle'
 with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
     dataset = pickle.load(f)
 
-plt.hist(dataset['traj_len'], bins=31)
+plt.hist(dataset['traj_len'], bins=30)
 plt.show()

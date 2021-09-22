@@ -24,7 +24,7 @@ class Settings(Serializable):
     seq_len: int = 31
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
+    model: str = 'GPT' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -46,7 +46,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = 'best.pth' # checkpoint file name for resuming
+    resume: str = 'ckpt_epoch_1000.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1500
 
@@ -63,7 +63,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.10_400Kdata_maskpad_RNN'
+    model_name: str = '9.21_new_dataset_GPT'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs

@@ -24,11 +24,11 @@ class LightDarkDataset(Dataset):
         self.dim_state = config.dim_state
         self.dim_reward = config.dim_reward
 
-        # for WeightedRandomSampler
-        self.p_sample = dataset['p_sample']
+        # # for WeightedRandomSampler
+        # self.p_sample = dataset['p_sample']
 
     def __len__(self):
-        return len(self.dataset['traj_len'])
+        return len(self.dataset['observation'])
 
     def __getitem__(self, index):
         observation = self.dataset['observation'][index]

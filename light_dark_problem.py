@@ -598,21 +598,21 @@ class LightDarkViz:
 
 
 def main():
-    plotting = False
-    save_data = False
+    plotting = True
     save_log = False
+    save_data = False
 
-    guide = False
-    rollout_guide = False
+    guide = True
+    rollout_guide = True
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 20
-    num_particles = 1000
+    num_planning = 1
+    num_particles = 100
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','long_5')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','long_1K_10')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -715,7 +715,7 @@ def main():
 
             # |TODO| how to move in planner.update? need to resolve "TODO" for reward
             # update history
-            light_dark_problem.agent.update_history(best_action, real_observation.position, next_state.position, total_reward)
+            light_dark_problem.agent.update_history(best_action, real_observation.position, next_state.position, reward)
 
             print("Action: %s" % str(best_action))
             print("Observation: %s" % real_observation)

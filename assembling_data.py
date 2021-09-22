@@ -5,8 +5,8 @@ import numpy as np
 data_dir = os.path.join(os.getcwd(), 'result/dataset')
 
 # For train dataset
-# version = ['sim10K_1', 'sim10K_2', 'sim10K_3', 'sim10K_4']
-version = ['sim1K_3']
+# version = ['long_1K_1', 'long_1K_2', 'long_1K_3', 'long_1K_4', 'long_1K_6', 'long_1K_7', 'long_1K_8', 'long_1K_9']
+version = ['long_1K_1']
 # version = ['sim10K_test']
 
 print('='*20, 'train dataset', '='*20)
@@ -14,18 +14,13 @@ print('='*20, 'loading', '='*20)
 
 data = []
 for ver in version:
-    with open(os.path.join(data_dir, f'{ver}/simulation_history_data_success.pickle'), 'rb') as f:
+    with open(os.path.join(data_dir, f'{ver}/simulation_history_data.pickle'), 'rb') as f:
         try:
             while True:
                 data.append(pickle.load(f))
         except EOFError:
             pass
-    # with open(os.path.join(data_dir, f'{ver}/simulation_history_data_fail.pickle'), 'rb') as f:
-    #     try:
-    #         while True:
-    #             data.append(pickle.load(f))
-    #     except EOFError:
-    #         pass
+
     print(f'Loading #{ver} is finished!')
 
 print('#total planning:', len(data))
@@ -60,6 +55,7 @@ for k in range(len(data)): # about all pickle
 
 
 print('#total traj.:', len(action))
+print(len(traj_len))
 
 dataset = {}
 dataset['action'] = action
@@ -68,7 +64,7 @@ dataset['next_state'] = next_state
 dataset['reward'] = reward
 dataset['traj_len'] = traj_len
 
-with open(os.path.join(data_dir, 'light_dark_.pickle'), 'wb') as f:
+with open(os.path.join(data_dir, 'light_dark_long_mini.pickle'), 'wb') as f:
     pickle.dump(dataset, f)
 
 print('Saving is finished!!')
@@ -77,25 +73,21 @@ print('Saving is finished!!')
 
 # # For test dataset
 
-# ver = 'sim10K_test'
+# version = ['long_1K_5', 'long_1K_10']
 
 # print('='*20, 'test dataset', '='*20)
 # print('='*20, 'loading', '='*20)
 
 # data = []
-# with open(os.path.join(data_dir, f'{ver}/simulation_history_data_success.pickle'), 'rb') as f:
-#     try:
-#         while True:
-#             data.append(pickle.load(f))
-#     except EOFError:
-#         pass
-# with open(os.path.join(data_dir, f'{ver}/simulation_history_data_fail.pickle'), 'rb') as f:
-#     try:
-#         while True:
-#             data.append(pickle.load(f))
-#     except EOFError:
-#         pass
-# print(f'Loading #{ver} is finished!')
+# for ver in version:
+#     with open(os.path.join(data_dir, f'{ver}/simulation_history_data.pickle'), 'rb') as f:
+#         try:
+#             while True:
+#                 data.append(pickle.load(f))
+#         except EOFError:
+#             pass
+
+#     print(f'Loading #{ver} is finished!')
 
 # print('#total planning:', len(data))
 
@@ -105,6 +97,7 @@ print('Saving is finished!!')
 # observation = []
 # next_state = []
 # reward = []
+# traj_len = []
 
 # for k in range(len(data)): # about all pickle
 #     for i in range(len(data[k])): # about all traj.
@@ -129,6 +122,8 @@ print('Saving is finished!!')
 
 
 # print('#total traj.:', len(action))
+# print(len(traj_len))
+
 
 # dataset = {}
 # dataset['action'] = action
@@ -137,7 +132,7 @@ print('Saving is finished!!')
 # dataset['reward'] = reward
 # dataset['traj_len'] = traj_len
 
-# with open(os.path.join(data_dir, 'light_dark_test_tiny.pickle'), 'wb') as f:
+# with open(os.path.join(data_dir, 'light_dark_long_test.pickle'), 'wb') as f:
 #     pickle.dump(dataset, f)
 
 # print('Saving is finished!!')

@@ -7,7 +7,7 @@ save_dir = os.getcwd() + '/Learning/new_dataset'
 filename = os.listdir(load_dir)
 
 for file in filename:
-    file = 'light_dark_10K.pickle'
+    file = 'light_dark_long_test.pickle'
     print(f'continuing....{file}')
     with open(os.path.join(load_dir, file), 'rb') as f:
         dataset = pickle.load(f)

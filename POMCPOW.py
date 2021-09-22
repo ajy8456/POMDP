@@ -135,6 +135,7 @@ class POMCPOW(Planner):
                     log_value[key] = self._agent.tree.children[key].value
                 pickle.dump(log_value, f)
 
+        print('Tree value:', self._agent.tree.value)
         return best_action, time_taken, sims_count
 
     # |NOTE| uniformly random
@@ -146,7 +147,7 @@ class POMCPOW(Planner):
         _action = (_action_x,_action_y)
         return _action
 
-    def _ActionProgWiden(self, vnode, history, state, traj, guide, k_a=2, alpha_a=1/2):
+    def _ActionProgWiden(self, vnode, history, state, guide, k_a=2, alpha_a=1/2):
         _history = vnode
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             if guide:
@@ -187,8 +188,7 @@ class POMCPOW(Planner):
         # print("call _ActionProgWiden()")
         # ################################################################
 
-        traj = None
-        action = self._ActionProgWiden(vnode=root, history=history, state=state, traj=traj, guide=guide)
+        action = self._ActionProgWiden(vnode=root, history=history, state=state, guide=guide)
 
         # ################################################################
         # print(f"return _ucb() & _ActionProgWiden(): action {action}")
@@ -250,7 +250,7 @@ class POMCPOW(Planner):
             # print("call _rollout()")
             # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data, traj=traj, rollout_guide=rollout_guide)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data, rollout_guide=rollout_guide)
 
         else:
             # |NOTE| append s` to B(hao)
@@ -322,7 +322,7 @@ class POMCPOW(Planner):
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging, save_data, traj, rollout_guide=False): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, save_data, rollout_guide=False): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
 
