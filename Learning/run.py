@@ -19,8 +19,8 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    train_file: str = 'light_dark_10K.pickle'
-    test_file: str = 'light_dark_10K.pickle'
+    train_file: str = 'light_dark_long_train_400K.pickle'
+    test_file: str = 'light_dark_long_test_100K.pickle'
     batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
@@ -33,7 +33,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN or LSTM
+    model: str = 'RNN' # GPT or RNN or LSTM
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
@@ -56,7 +56,7 @@ class Settings(Serializable):
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     resume: str = None # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 100
+    epochs: int = 1000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
@@ -71,7 +71,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test'
+    model_name: str = '9.22_dropout0.1_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs

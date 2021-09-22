@@ -195,6 +195,7 @@ class GPT2DecoderLayer(nn.Module):
         self.layer_norm1 = nn.LayerNorm(self.config.dim_hidden)
         self.ffn = FeedForwardNetwork(self.config)
         self.layer_norm2 = nn.LayerNorm(self.config.dim_hidden)
+        self.dropout = nn.Dropout(config.dropout)
     
     def forward(self, x, attn_mask):
         # (batch_size, num_dec_seq, dim_hidden), (batch_size, num_heads, num_dec_seq, num_dec_seq)
@@ -207,7 +208,7 @@ class GPT2DecoderLayer(nn.Module):
         # if self.config.print_in_out:
         #     print("Output of MultiHeadAttention:", self_attn_out, self_attn_prob)
 
-        self_attn_out = self.layer_norm1(x + self_attn_out)
+        self_attn_out = self.layer_norm1(x + self.dropout(self_attn_out))
 
         # if self.config.print_in_out:
         #     print("Output of LN1:", self_attn_out)
@@ -218,7 +219,7 @@ class GPT2DecoderLayer(nn.Module):
         # if self.config.print_in_out:
         #     print("Output of FFN:", ffn_out)
 
-        ffn_outputs = self.layer_norm2(self_attn_out + ffn_out)
+        ffn_outputs = self.layer_norm2(self_attn_out + self.dropout(ffn_out))
 
         # if self.config.print_in_out:
         #     print("Output of LN2:", ffn_out)
@@ -261,6 +262,7 @@ class GPT2(nn.Module):
         else:
             self.pos_embed = PositionalEncoding(self.config)
         
+        self.dropout = nn.Dropout(config.dropout)
         self.ln = nn.LayerNorm(self.dim_hidden)
 
         self.layers = []
@@ -306,6 +308,9 @@ class GPT2(nn.Module):
         #     # attention mask for GPT: 1 if can be attended to, 0 if not
         #     attn_mask = th.ones((batch_size, seq_len), dtype=th.long)
         attn_mask = ~data['mask']
+
+        input_embeddings = self.dropout(input_embeddings)
+        input_embeddings = self.ln(input_embeddings)
 
         # if self.config.print_in_out:
         #     print("Input of 1-th GPT2DecoderLayer:", input_embeddings)
@@ -370,7 +375,7 @@ class RNN(nn.Module):
             else:
                 self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         
-        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.rnn = nn.RNN(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, dropout=self.config.dropout, batch_first=True)
         self.predict_action = nn.Linear(self.dim_hidden, self.dim_action)
 
 
@@ -434,7 +439,7 @@ class LSTM(nn.Module):
             else:
                 self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
         
-        self.lstm = nn.LSTM(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_size=self.dim_embed, hidden_size=self.dim_hidden, num_layers=self.num_layers, dropout=self.config.dropout, batch_first=True)
         self.predict_action = nn.Linear(self.dim_hidden, self.dim_action)
 
 
