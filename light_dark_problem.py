@@ -357,10 +357,10 @@ class LightDarkEnvironment(Environment):
 
 
 class LightDarkProblem(POMDP):
-    def __init__(self, init_state, init_belief, goal_state, light, const, guide=False):
-        if guide:
-            nn_config = Settings()
-            guide_policy = NNRegressionPolicyModel(nn_config)
+    def __init__(self, init_state, init_belief, goal_state, light, const, guide_policy=None):
+        if guide_policy is not None:
+            # nn_config = Settings()
+            # guide_policy = NNRegressionPolicyModel(nn_config)
             agent = Agent(init_belief,
                       guide_policy,
                       TransitionModel(),
@@ -598,16 +598,16 @@ class LightDarkViz:
 
 
 def main():
-    plotting = True
+    plotting = False
     save_log = False
     save_data = False
 
     guide = True
-    rollout_guide = True
+    rollout_guide = False
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
+    num_planning = 100
     num_particles = 100
     init_random_range = 0
 
@@ -615,6 +615,16 @@ def main():
         save_dir = os.path.join(os.getcwd(),'result/dataset','long_1K_10')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
+
+    log_time = []
+    log_val_success =[]
+    log_val_fail = []
+
+    if guide:
+        nn_config = Settings()
+        guide_policy = NNRegressionPolicyModel(nn_config)
+    else:
+        guide_policy = None
 
     for n in range(num_planning):
         print("========================================================") 
@@ -649,7 +659,7 @@ def main():
         discont_factor = 0.9
         
         # creates POMDP model
-        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, guide)
+        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, guide_policy)
         # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
         light_dark_problem.agent.set_belief(init_belief)
 
@@ -669,6 +679,8 @@ def main():
         total_reward = 0
         total_num_sims = 0
         total_plan_time = 0.0
+        log_time_each = []
+        log_val_each = []
         for i in range(planning_horizon):
             logging = save_log and i==0
             if i == 0:
@@ -688,7 +700,12 @@ def main():
 
             print("==== Step %d ====" % (i+1))
 
-            best_action, time_taken, sims_count = planner.plan(light_dark_problem.agent, i, logging, save_data, guide, rollout_guide)
+            best_action, time_taken, sims_count, tree_value = planner.plan(light_dark_problem.agent, i, logging, save_data, guide, rollout_guide)
+            
+            log_time_each.append(time_taken)
+            log_val_each.append(tree_value)
+            log_time_each_avg = np.mean(np.asarray(log_time_each))
+            log_val_each_avg = np.mean(np.asarray(log_val_each))
 
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
@@ -711,7 +728,7 @@ def main():
             if not check_goal:
                 reward = -1
 
-            total_reward = reward + discont_factor*total_reward
+            total_reward = reward + discont_factor * total_reward
 
             # |TODO| how to move in planner.update? need to resolve "TODO" for reward
             # update history
@@ -744,6 +761,8 @@ def main():
                 print("Total Num sims: %d" % total_num_sims)
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
+         
+                log_val_success.append(log_val_each_avg)
                 
                 # # save data
                 # if save_data:
@@ -767,6 +786,8 @@ def main():
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
 
+                log_val_fail.append(log_val_each_avg)
+
                 # # save data
                 # if save_data:
                 #     with open(os.path.join(save_dir,'fail_history.pickle'), 'ab') as f:
@@ -787,13 +808,28 @@ def main():
                         path_widths={0: 4,
                                     1: 1})
             plt.show()
-    
+
+        log_time.append(log_time_each_avg)
+
         print("num_sucess: %d" % num_sucess)
         print("num_fail: %d" % num_fail)
+
+    time_mean = np.mean(np.asarray(log_time))
+    time_std = np.std(np.asarray(log_time))
+    val_success_mean = np.mean(np.asarray(log_val_success))
+    val_success_std = np.std(np.asarray(log_val_success))
+    val_fail_mean = np.mean(np.asarray(log_val_fail))
+    val_fail_std = np.std(np.asarray(log_val_fail))
 
     print("====Finish===")
     print("total_num_sucess: %d" % num_sucess)
     print("total_num_fail: %d" % num_fail)
+    print("planning time(mean): %f" % time_mean)
+    print("planning time(std): %f" % time_std)
+    print("value of tree(success/mean): %f" % val_success_mean)
+    print("value of tree(success/std): %f" % val_success_std)
+    print("value of tree(fail/mean): %f" % val_fail_mean)
+    print("value of tree(fail/std): %f" % val_fail_std)
       
 
 if __name__ == '__main__':

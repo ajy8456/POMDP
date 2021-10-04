@@ -135,8 +135,8 @@ class POMCPOW(Planner):
                     log_value[key] = self._agent.tree.children[key].value
                 pickle.dump(log_value, f)
 
-        print('Tree value:', self._agent.tree.value)
-        return best_action, time_taken, sims_count
+        # print('Tree value:', self._agent.tree.value)
+        return best_action, time_taken, sims_count, self._agent.tree.value
 
     # |NOTE| uniformly random
     # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain

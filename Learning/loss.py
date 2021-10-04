@@ -1,5 +1,6 @@
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as F
 
 from typing import Dict
 
@@ -27,5 +28,21 @@ class RegressionLoss(nn.Module):
 
         # loss['total'] = loss_total
         loss['total'] = loss_action
+
+        return loss
+
+
+class ELBOLoss(nn.Module):
+    def __init__(self, config):
+        super(ELBOLoss, self).__init__()
+        self.config = config
+
+    def forward(self, recon_x, x, mean, log_var):
+        loss = {}
+        recon_loss = F.mse_loss(recon_x, x)
+        kld = -0.5 * th.sum(1 + log_var - mean.pow(2) - log_var.exp()) / x.size(0) # Using reparameterization
+        loss['Recon'] = recon_loss
+        loss['KL_div'] = kld
+        loss['total'] = recon_loss + kld
 
         return loss

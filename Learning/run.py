@@ -2,13 +2,14 @@ import os
 import time
 from dataclasses import dataclass, replace
 from simple_parsing import Serializable
+from typing import List
 import pickle
 import torch as th
 from tensorboardX import SummaryWriter
 
 from load import get_loader
-from model import GPT2, RNN, LSTM
-from loss import RegressionLoss
+from model import GPT2, RNN, LSTM, CVAE
+from loss import RegressionLoss, ELBOLoss
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
@@ -33,23 +34,30 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN or LSTM
+    model: str = 'GPT' # GPT or RNN or LSTM or CVAE
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 128
-    dim_hidden: int = 128
-    dim_head: int = 128
-    num_heads: int = 1
-    dim_ffn: int = 128 * 4
+    dim_embed: int = 16
+    dim_hidden: int = 16
 
-    num_layers: int = 3
+    # for GPT
+    dim_head: int = 16
+    num_heads: int = 1
+    dim_ffn: int = 16 * 4
+    num_layers: int = 4
+
+    # for CVAE
+    latent_size: int = 128
+    encoder_layer_sizes = [2, 32, 16]
+    decoder_layer_sizes = [32, 16, 2]
+    dim_condition: int = 128
 
     train_pos_en: bool = False
     use_reward: bool = True
     use_mask_padding: bool = True
     coefficient_loss: float = 1e-3
 
-    dropout: float = 0.0
+    dropout: float = 0.1
     action_tanh: bool = False
 
     # Training
@@ -71,14 +79,14 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.22_dropout0.1_RNN'
+    model_name: str = '10.4_GPT_dim16_layer4'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
     save_freq: int = 100 # per epochs
 
-    log_para: bool = False
-    log_grad: bool = False
+    log_para: bool = True
+    log_grad: bool = True
     eff_grad: bool = False
     print_num_para: bool = False
     print_in_out: bool = False
@@ -117,6 +125,8 @@ def main():
         model = RNN(config).to(device)
     elif config.model == 'LSTM':
         model = LSTM(config).to(device)
+    elif config.model == 'CVAE':
+        model = CVAE(config).to(device)
     else:
         raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')
 
@@ -141,8 +151,12 @@ def main():
         raise Exception(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
 
     # Metric
-    loss_fn = RegressionLoss(config)
-    eval_fn = RegressionLoss(config)
+    if config.model == 'CVAE':
+        loss_fn = ELBOLoss(config)
+        eval_fn = ELBOLoss(config)
+    else:
+        loss_fn = RegressionLoss(config)
+        eval_fn = RegressionLoss(config)
 
     # Trainer & Evaluator
     trainer = Trainer(config=config,
@@ -163,7 +177,7 @@ def main():
     dummy = next(iter(test_loader))
     for k in dummy:
         dummy[k].to(device).detach()
-    logger.add_graph(ModelAsTuple(model), dummy)
+    logger.add_graph(ModelAsTuple(config, model), dummy)
 
     start_epoch = 1
     best_error = 10000.
@@ -186,15 +200,22 @@ def main():
         train_loss, train_val = trainer.train(epoch)
 
         # Logging
-        logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
-        logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
-        log_gradients(model, logger, epoch, log_grad=config.log_grad, log_param=config.log_para, eff_grad=config.eff_grad, print_num_para=config.print_num_para)
-        # if config.use_reward:
-        #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
+        if config.model == 'CVAE':
+            logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
+            logger.add_scalar('Loss(Reconstruction)/train', train_loss['Recon'], epoch)
+            logger.add_scalar('Loss(KL_divergence)/train', train_loss['KL_div'], epoch)
+        else:
+            logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
+            logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
+            # if config.use_reward:
+            #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 
-        logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
-        # if config.use_reward:
-        #     logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
+            logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
+            # if config.use_reward:
+            #     logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
+
+        # |FIXME| debug for eff_grad: "RuntimeError: Boolean value of Tensor with more than one value is ambiguous"
+        log_gradients(model, logger, epoch, log_grad=config.log_grad, log_param=config.log_para, eff_grad=config.eff_grad, print_num_para=config.print_num_para)
 
         # evaluating
         if epoch % config.test_eval_freq == 0:
@@ -202,29 +223,48 @@ def main():
             test_val = evaluator.eval(epoch)
 
             # save the best model
-            if test_val['action'] < best_error:
-                best_error = test_val['action']
+            # |TODO| change 'action' to 'total' @ trainer.py & evaluator.py -> merge 'CVAE' & others
+            if config.model == 'CVAE':
+                if test_val['total'] < best_error:
+                    best_error = test_val['total']
 
-                save_checkpoint('Saving the best model!',
-                                os.path.join(model_dir, 'best.pth'),
-                                epoch, 
-                                best_error, 
-                                model, 
-                                optimizer, 
-                                scheduler
-                                )
+                    save_checkpoint('Saving the best model!',
+                                    os.path.join(model_dir, 'best.pth'),
+                                    epoch, 
+                                    best_error, 
+                                    model, 
+                                    optimizer, 
+                                    scheduler
+                                    )
+            else:
+                if test_val['action'] < best_error:
+                    best_error = test_val['action']
+
+                    save_checkpoint('Saving the best model!',
+                                    os.path.join(model_dir, 'best.pth'),
+                                    epoch, 
+                                    best_error, 
+                                    model, 
+                                    optimizer, 
+                                    scheduler
+                                    )
             
             # Logging
-            logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
-            # if config.use_reward:
-            #     logger.add_scalar('Eval(reward)/test', test_val['reward'], epoch)
+            if config.model == 'CVAE':
+                logger.add_scalar('Eval(total)/test', test_val['total'], epoch)
+                logger.add_scalar('Eval(Reconstruction)/test', test_val['Recon'], epoch)
+                logger.add_scalar('Eval(KL_divergence)/test', test_val['KL_div'], epoch)
+            else:
+                logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
+                # if config.use_reward:
+                #     logger.add_scalar('Eval(reward)/test', test_val['reward'], epoch)
         
         # save the model
         if epoch % config.save_freq == 0:
             save_checkpoint('Saving...', 
                             os.path.join(model_dir, f'ckpt_epoch_{epoch}.pth'), 
                             epoch, 
-                            test_val['action'], 
+                            best_error, 
                             model, 
                             optimizer, 
                             scheduler

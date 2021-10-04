@@ -17,8 +17,8 @@ from load import LightDarkDataset
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    train_file: str = 'light_dark_train_400K.pickle'
-    test_file: str = 'light_dark_test_100K.pickle'
+    train_file: str = 'light_dark_long_train_400K.pickle'
+    test_file: str = 'light_dark_long_test_100K.pickle'
     batch_size: int = 1 # 100steps/epoch
     shuffle: bool = False # for using Sampler, it should be False
     use_sampler: bool = False
@@ -31,23 +31,29 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
+
+    # for GPT
     dim_head: int = 128
     num_heads: int = 1
-    dim_ffn: int = 128 * 4
-
+    dim_ffn: int = 128 * 2
     num_layers: int = 3
+
+    # for CVAE
+    latent_size: int = 128
+    encoder_layer_sizes = [2, 128]
+    decoder_layer_sizes = [128, 2]
+    dim_condition: int = 128
 
     train_pos_en: bool = False
     use_reward: bool = True
     use_mask_padding: bool = True
     coefficient_loss: float = 1e-3
 
-    dropout: float = 0.0
+    dropout: float = 0.1
     action_tanh: bool = False
 
     # Training
@@ -70,7 +76,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name_GPT: str = '9.13_400Kdata_GPT_debug'
+    model_name_GPT: str = '9.14_400Kdata_GPT_drop0.1'
     model_name_RNN: str = '9.10_400Kdata_maskpad_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
@@ -81,6 +87,8 @@ class Settings(Serializable):
     num_pred: int = 100
     current_step: int = 1
     print_in_out: bool = False
+    num_input: int = 1
+    num_output: int = 10
     
 
 def collect_target(config, dataset):

@@ -35,15 +35,26 @@ class Trainer(object):
 
     def train(self, epoch):
         batch_time = AverageMeter('Time', ':6.3f')
-        losses_total = AverageMeter('Total Loss', ':.4e')
-        losses_action = AverageMeter('Action Loss', ':.4e')
-        losses_reward = AverageMeter('Reward Loss', ':.4e')
-        vals_action = AverageMeter('Action MAE', ':.4e')
-        vals_reward = AverageMeter('Reward MSE', ':.4e')
+        if self.config.model == 'CVAE':
+            losses_elbo = AverageMeter('ELBO', ':4e')
+            losses_recon = AverageMeter('Reconstruction Error', ':4e')
+            losses_kld = AverageMeter('KL-divergence', ':.4e')
+            vals_elbo = AverageMeter('ELBO', ':4e')
+            vals_recon = AverageMeter('Reconstruction Error', ':4e')
+            vals_kld = AverageMeter('KL-divergence', ':.4e')
 
-        progress = ProgressMeter(len(self.loader),
-                                 [batch_time, losses_total, vals_action],
-                                 prefix="Epoch: [{}]".format(epoch))
+            progress = ProgressMeter(len(self.loader),
+                                     [batch_time, losses_elbo, vals_elbo],
+                                     prefix="Epoch: [{}]".format(epoch))
+            
+        else:
+            losses_total = AverageMeter('Total Loss', ':.4e')
+            losses_action = AverageMeter('Action SmoothL1Loss', ':.4e')
+            vals_action = AverageMeter('Action SmoothL1Loss', ':.4e')
+
+            progress = ProgressMeter(len(self.loader),
+                                     [batch_time, losses_total, vals_action],
+                                     prefix="Epoch: [{}]".format(epoch))
         
         self.model.train()
 
@@ -56,9 +67,31 @@ class Trainer(object):
             #     target_reward = th.squeeze(data['next_reward'])
             #     target['reward'] = target_reward
 
-            pred = self.model(data)
+            losses = {}
+            if self.config.model == 'CVAE':
+                recon_x, mean, log_var, z = self.model(data)
+                loss = self.loss_fn(recon_x, target['action'], mean, log_var)
 
-            loss = self.loss_fn(pred, target)
+                losses_elbo.update(loss['total'].item(), data['observation'].size(0))
+                losses_recon.update(loss['Recon'].item(), data['observation'].size(0))
+                losses_kld.update(loss['KL_div'].item(), data['observation'].size(0))
+            
+                losses['total'] = losses_elbo.avg
+                losses['Recon'] = losses_recon.avg
+                losses['KL_div'] = losses_kld.avg
+            else:
+                pred = self.model(data)
+                loss = self.loss_fn(pred, target)
+                
+                losses_total.update(loss['total'].item(), data['observation'].size(0))
+                losses_action.update(loss['action'].item(), data['observation'].size(0))
+                # if self.config.use_reward:
+                #     losses_reward.update(loss['reward'].item(), data['observation'].size(0))
+
+                losses['total'] = losses_total.avg
+                losses['action'] = losses_action.avg
+                # if self.config.use_reward:
+                #     losses['reward'] = losses_reward.avg
 
             # Backprop + Optimize ...
             self.optim.zero_grad()
@@ -69,11 +102,6 @@ class Trainer(object):
             if self.scheduler is not None:
                 self.scheduler.step()
 
-            # measure elapsed time
-            losses_total.update(loss['total'].item(), data['observation'].size(0))
-            losses_action.update(loss['action'].item(), data['observation'].size(0))
-            # if self.config.use_reward:
-            #     losses_reward.update(loss['reward'].item(), data['observation'].size(0))
             batch_time.update(time.time() - end)
             end = time.time()
 
@@ -81,27 +109,33 @@ class Trainer(object):
                 self.model.eval()
 
                 with th.no_grad():
-                    val = self.eval_fn(pred, target)
-                vals_action.update(val['action'].item(), data['observation'].size(0))
-                # if self.config.use_reward:
-                #     vals_reward.update(val['reward'].item(), data['observation'].size(0))
+                    vals = {}
+                    if self.config.model == 'CVAE':
+                        val = self.eval_fn(recon_x, target['action'], mean, log_var)
+                        
+                        vals_elbo.update(val['total'].item(), data['observation'].size(0))
+                        vals_recon.update(val['Recon'].item(), data['observation'].size(0))
+                        vals_kld.update(val['KL_div'].item(), data['observation'].size(0))
+                
+                        vals['total'] = vals_elbo.avg
+                        vals['Recon'] = vals_recon.avg
+                        vals['KL_div'] = vals_kld.avg
+                    else:
+                        val = self.eval_fn(pred, target)
+                
+                        vals_action.update(val['action'].item(), data['observation'].size(0))
+                        # if self.config.use_reward:
+                        #     vals_reward.update(val['reward'].item(), data['observation'].size(0))
 
+                        vals['action'] = vals_action.avg
+                        # if self.config.use_reward:
+                        #     vals['reward'] = vals_reward.avg
+                
                 self.model.train()
 
             if i % self.config.print_freq == 0:
                 progress.display(i)
-            
-            losses = {}
-            losses['total'] = losses_total.avg
-            losses['action'] = losses_action.avg
-            # if self.config.use_reward:
-            #     losses['reward'] = losses_reward.avg
-
-            vals = {}
-            vals['action'] = vals_action.avg
-            # if self.config.use_reward:
-            #     vals['reward'] = vals_reward.avg
-
+ 
         return losses, vals
 
     

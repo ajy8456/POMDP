@@ -8,7 +8,7 @@ from torch.utils import data
 
 from POMDP_framework import PolicyModel
 
-from Learning.model import GPT2, RNN, LSTM
+from Learning.model import GPT2, RNN, LSTM, CVAE
 from Learning.saver import load_checkpoint
 from Learning.utils import CosineAnnealingWarmUpRestarts
 
@@ -24,14 +24,14 @@ class Settings(Serializable):
     seq_len: int = 31
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN
+    model: str = 'RNN' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 128
     dim_hidden: int = 128
     dim_head: int = 128
     num_heads: int = 1
-    dim_ffn: int = 128 * 4
+    dim_ffn: int = 128 * 2
 
     num_layers: int = 3
 
@@ -42,11 +42,25 @@ class Settings(Serializable):
 
     dropout: float = 0.0
     action_tanh: bool = False
+    
+    # for CVAE
+    latent_size: int = 128
+    encoder_layer_sizes = [2, 128]
+    decoder_layer_sizes = [128, 2]
+    dim_condition: int = 128
+
+    train_pos_en: bool = False
+    use_reward: bool = True
+    use_mask_padding: bool = True
+    coefficient_loss: float = 1e-3
+
+    dropout: float = 0.1
+    action_tanh: bool = False
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     # device: str = 'cpu'
-    resume: str = 'ckpt_epoch_1000.pth' # checkpoint file name for resuming
+    resume: str = 'best.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1500
 
@@ -63,7 +77,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.21_new_dataset_GPT'
+    model_name: str = '9.23_dropout0.1_RNN'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -71,6 +85,7 @@ class Settings(Serializable):
 
     # Prediction
     print_in_out: bool = False
+    variance: float = 0.5
 
 
 class NNRegressionPolicyModel(PolicyModel):
@@ -86,8 +101,11 @@ class NNRegressionPolicyModel(PolicyModel):
             self.model = RNN(config).to(self.device)
         elif config.model == 'LSTM':
             self.model = LSTM(config).to(self.device)
+        elif config.model == 'CVAE':
+            self.model = CVAE(config).to(self.device)
         else:
-            raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')        
+            raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')     
+
         self.model.eval()
 
         # optimizer
@@ -133,12 +151,21 @@ class NNRegressionPolicyModel(PolicyModel):
         data = self._traj2data(history)
 
         # predict next action
+
         with th.no_grad():
-            time_start = time.time()
-            pred = self.model(data)
-            time_end = time.time()
-            pred = tuple(pred['action'].tolist())
-            infer_time = time_end - time_start
+            if self.config.model == 'CVAE':
+                time_start = time.time()
+                pred = self.model.inference(data).squeeze()
+                time_end = time.time()
+                pred = tuple(pred.tolist())
+                infer_time = time_end - time_start
+            else:
+                time_start = time.time()
+                pred = self.model(data)
+                time_end = time.time()
+                pred = tuple(pred['action'].tolist())
+                # pred = tuple((pred['action'] + self.config.variance * th.randn(pred['action'].shape, device=pred['action'].device)).tolist())
+                infer_time = time_end - time_start
 
         return pred, infer_time
     

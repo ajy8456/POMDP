@@ -273,7 +273,11 @@ class GPT2(nn.Module):
 
         # self.ln2 = nn.LayerNorm(self.dim_hidden)
 
-        self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
+        if config.model == 'CVAE':
+            self.fc_condi = nn.Sequential(nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition),
+                                          nn.Tanh())
+        else:
+            self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
     # def forward(self, observations, actions, attn_mask=None):
     def forward(self, data):
@@ -336,10 +340,13 @@ class GPT2(nn.Module):
         # if self.config.print_in_out:
             # print(f"Input of action predict FC:", dec_outputs)
 
-        pred = {}
-        pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
-        pred_action = th.squeeze(pred_action)
-        pred['action'] = pred_action
+        if self.config.model == 'CVAE':
+            out = self.fc_condi(dec_outputs.flatten(start_dim=1))
+        else:    
+            out = {}
+            pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
+            pred_action = th.squeeze(pred_action)
+            out['action'] = pred_action
 
         # if self.config.print_in_out:
         #     print(f"Output of action predict FC:", pred_action)
@@ -349,7 +356,7 @@ class GPT2(nn.Module):
         #     pred_reward = th.squeeze(pred_reward)
         #     pred['reward'] = pred_reward
 
-        return pred
+        return out
 
 
 class RNN(nn.Module):
@@ -479,6 +486,108 @@ class LSTM(nn.Module):
         #     pred['reward'] = pred_reward
 
         return pred
+
+
+class CVAEEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.layer_sizes = config.encoder_layer_sizes
+        self.latent_size = config.latent_size
+        self.dim_condition = config.dim_condition
+
+        self.layer_sizes[0] += self.dim_condition
+
+        self.MLP = nn.Sequential()
+
+        for i, (in_size, out_size) in enumerate(zip(self.layer_sizes[:-1], self.layer_sizes[1:])):
+            self.MLP.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+
+        self.linear_means = nn.Linear(self.layer_sizes[-1], self.latent_size)
+        self.linear_log_var = nn.Linear(self.layer_sizes[-1], self.latent_size)
+
+    def forward(self, x, c):
+        x = th.cat((x, c), dim=-1)
+        x = self.MLP(x)
+
+        means = self.linear_means(x)
+        log_vars = self.linear_log_var(x)
+
+        return means, log_vars
+
+
+class CVAEDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layer_sizes = config.decoder_layer_sizes
+        self.latent_size = config.latent_size
+        self.dim_condition = config.dim_condition
+
+        self.MLP = nn.Sequential()
+
+        input_size = self.latent_size + self.dim_condition
+
+        for i, (in_size, out_size) in enumerate(zip([input_size]+self.layer_sizes[:-1], self.layer_sizes)):
+            self.MLP.add_module(
+                name="L{:d}".format(i), module=nn.Linear(in_size, out_size))
+            if i+1 < len(self.layer_sizes):
+                self.MLP.add_module(name="A{:d}".format(i), module=nn.ReLU())
+            else:
+                if self.config.action_tanh:
+                    self.MLP.add_module(name="tanh", module=nn.Tanh())
+
+    def forward(self, z, c):
+        z = th.cat((z, c), dim=-1)
+        x = self.MLP(z)
+
+        return x
+
+
+class CVAE(nn.Module):
+    def __init__(self, config):
+        super(CVAE, self).__init__()
+        
+        self.config = config
+        self.latent_size = config.latent_size
+        self.encoder_layer_sizes = config.encoder_layer_sizes
+        self.decoder_layer_sizes = config.decoder_layer_sizes
+        self.dim_condition = config.dim_condition
+
+        assert type(self.latent_size) == int
+        assert type(self.encoder_layer_sizes) == list
+        assert type(self.decoder_layer_sizes) == list
+
+        self.encoder = CVAEEncoder(config)
+        self.decoder = CVAEDecoder(config)
+        # |TODO| make RNN, LSTM also available
+        self.condition = GPT2(config)
+
+    def forward(self, data):
+        x = data['next_action'].squeeze()
+        c = self.condition(data)
+
+        mean, log_var = self.encoder(x, c)
+        z = self.reparameterize(mean, log_var)
+        recon_x = self.decoder(z, c)
+
+        return recon_x, mean, log_var, z
+
+    def reparameterize(self, mu, log_var):
+        std = th.exp(0.5 * log_var)
+        eps = th.randn_like(std)
+
+        return mu + eps * std
+
+    def inference(self, data):
+        c = self.condition(data)
+        z = th.randn([c.size(0), self.config.latent_size]).to(self.config.device)
+        recon_x = self.decoder(z, c)
+
+        return recon_x
 
 
 if __name__ == '__main__':

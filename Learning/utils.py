@@ -5,11 +5,14 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 class ModelAsTuple(th.nn.Module):
     """Workaround to avoid tracing bugs in add_graph from rejecting outputs of form Dict[Schema,Any]."""
-    def __init__(self, model: th.nn.Module):
+    def __init__(self, config, model: th.nn.Module):
         super().__init__()
+        self.config = config
         self.model = model
 
     def forward(self, inputs):
+        if self.config.model == 'CVAE':
+            return tuple(v[0] for v in self.model(inputs))
         return tuple(v for (k, v) in self.model(inputs).items())
 
 
