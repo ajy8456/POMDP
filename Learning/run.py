@@ -20,9 +20,9 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    train_file: str = 'light_dark_long_train_400K.pickle'
-    test_file: str = 'light_dark_long_test_100K.pickle'
-    batch_size: int = 4096 # 100steps/epoch
+    train_file: str = 'light_dark_long_mini.pickle'
+    test_file: str = 'light_dark_long_mini.pickle'
+    batch_size: int = 1 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
     max_len: int = 100
