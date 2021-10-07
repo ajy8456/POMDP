@@ -20,9 +20,9 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    train_file: str = 'light_dark_long_mini.pickle'
-    test_file: str = 'light_dark_long_mini.pickle'
-    batch_size: int = 1 # 100steps/epoch
+    train_file: str = 'light_dark_long_train_400K.pickle'
+    test_file: str = 'light_dark_long_test_100K.pickle'
+    batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
     max_len: int = 100
@@ -34,7 +34,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN or LSTM or CVAE
+    model: str = 'CVAE' # GPT or RNN or LSTM or CVAE
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 16
@@ -44,13 +44,13 @@ class Settings(Serializable):
     dim_head: int = 16
     num_heads: int = 1
     dim_ffn: int = 16 * 4
-    num_layers: int = 4
+    num_layers: int = 3
 
     # for CVAE
-    latent_size: int = 128
+    latent_size: int = 16
     encoder_layer_sizes = [2, 32, 16]
-    decoder_layer_sizes = [32, 16, 2]
-    dim_condition: int = 128
+    decoder_layer_sizes = [16, 32, 2]
+    dim_condition: int = 16
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -79,7 +79,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '10.4_GPT_dim16_layer4'
+    model_name: str = '10.5_CVAE_latent16'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs

@@ -6,7 +6,7 @@ data_dir = os.path.join(os.getcwd(), 'result/dataset')
 
 # For train dataset
 # version = ['long_1K_1', 'long_1K_2', 'long_1K_3', 'long_1K_4', 'long_1K_6', 'long_1K_7', 'long_1K_8', 'long_1K_9']
-version = ['long_1K_1']
+version = ['long_1K']
 # version = ['sim10K_test']
 
 print('='*20, 'train dataset', '='*20)
@@ -64,7 +64,7 @@ dataset['next_state'] = next_state
 dataset['reward'] = reward
 dataset['traj_len'] = traj_len
 
-with open(os.path.join(data_dir, 'light_dark_long_mini.pickle'), 'wb') as f:
+with open(os.path.join(data_dir, 'light_dark_long_tiny.pickle'), 'wb') as f:
     pickle.dump(dataset, f)
 
 print('Saving is finished!!')

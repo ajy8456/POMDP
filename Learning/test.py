@@ -1,13 +1,14 @@
 import os
 import pickle
 import numpy as np
+from simple_parsing.helpers.serialization.serializable import D
 import torch as th
 import matplotlib.pyplot as plt
 
 
-path: str = 'Learning/dataset'
-dataset_path = os.path.join(os.getcwd(), path)
-dataset_filename = 'light_dark_long_mini.pickle'
+# path: str = 'Learning/dataset'
+# dataset_path = os.path.join(os.getcwd(), path)
+# dataset_filename = 'light_dark_long_mini.pickle'
 
 # with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
 #     dataset = pickle.load(f)
@@ -62,7 +63,24 @@ dataset_filename = 'light_dark_long_mini.pickle'
 #             'next_state': next_state,
 #             'traj_len': traj_len}
 
-a = np.array([[1, 0, 0], [1, 0, 0], [1, 0, 1], [2, 3, 4]])
-print(a.shape)
-print(np.unique(a, axis=0))
-print(a)
+std = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
+success_rate = np.array([0, 3, 18, 39, 25, 28, 14])
+val_success = np.array([None, 1.88, 3.90, 5.41, 4.89, 9.50, 3.77])
+val_fail = np.array([-4.17, -1.11, 1.63, 1.76, 0.65, -0.53, -1.45])
+
+fig, ax = plt.subplots(1, 2)
+
+ax[0].plot(std, success_rate, c='green')
+ax[1].plot(std[1:], val_success[1:], label = 'success')
+ax[1].plot(std, val_fail, label = 'fail')
+ax[1].legend(loc='best')
+
+ax[0].title.set_text("Success Rate")
+ax[1].title.set_text("Value of Root Node")
+
+ax[0].set_xlabel('Deviation')
+ax[0].set_ylabel('Sucess Rate(%)')
+ax[1].set_xlabel('Deviation')
+ax[1].set_ylabel('Value of Root Node(Avg.)')
+
+plt.show()

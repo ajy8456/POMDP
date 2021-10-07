@@ -607,12 +607,12 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 100
+    num_planning = 50
     num_particles = 100
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','long_1K_10')
+        save_dir = os.path.join(os.getcwd(),'result/dataset','long_1K')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 

@@ -24,16 +24,16 @@ class Settings(Serializable):
     seq_len: int = 31
 
     # Architecture
-    model: str = 'RNN' # GPT or RNN
+    model: str = 'CVAE' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 128
-    dim_hidden: int = 128
-    dim_head: int = 128
+    dim_embed: int = 8
+    dim_hidden: int = 8
+    dim_head: int = 8
     num_heads: int = 1
-    dim_ffn: int = 128 * 2
+    dim_ffn: int = 8 * 4
 
-    num_layers: int = 3
+    num_layers: int = 6
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -45,8 +45,8 @@ class Settings(Serializable):
     
     # for CVAE
     latent_size: int = 128
-    encoder_layer_sizes = [2, 128]
-    decoder_layer_sizes = [128, 2]
+    encoder_layer_sizes = [2, 32, 8]
+    decoder_layer_sizes = [32, 8, 2]
     dim_condition: int = 128
 
     train_pos_en: bool = False
@@ -62,7 +62,7 @@ class Settings(Serializable):
     # device: str = 'cpu'
     resume: str = 'best.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
-    epochs: int = 1500
+    epochs: int = 1000
 
     # Learning rate
     # |NOTE| using small learning rate, in order to apply warm up
@@ -77,7 +77,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '9.23_dropout0.1_RNN'
+    model_name: str = '10.3_CVAE_dim8_layer6'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -163,8 +163,8 @@ class NNRegressionPolicyModel(PolicyModel):
                 time_start = time.time()
                 pred = self.model(data)
                 time_end = time.time()
-                pred = tuple(pred['action'].tolist())
-                # pred = tuple((pred['action'] + self.config.variance * th.randn(pred['action'].shape, device=pred['action'].device)).tolist())
+                # pred = tuple(pred['action'].tolist())
+                pred = tuple((pred['action'] + self.config.variance * th.randn(pred['action'].shape, device=pred['action'].device)).tolist())
                 infer_time = time_end - time_start
 
         return pred, infer_time

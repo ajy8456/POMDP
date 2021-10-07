@@ -510,6 +510,7 @@ class CVAEEncoder(nn.Module):
         self.linear_log_var = nn.Linear(self.layer_sizes[-1], self.latent_size)
 
     def forward(self, x, c):
+        # |TODO| check shape after cat
         x = th.cat((x, c), dim=-1)
         x = self.MLP(x)
 
@@ -567,8 +568,9 @@ class CVAE(nn.Module):
         self.condition = GPT2(config)
 
     def forward(self, data):
+        # For training
         x = data['next_action'].squeeze()
-        c = self.condition(data)
+        c = self.condition(data).squeeze()
 
         mean, log_var = self.encoder(x, c)
         z = self.reparameterize(mean, log_var)
