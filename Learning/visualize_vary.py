@@ -25,20 +25,25 @@ class Settings(Serializable):
     # Architecture
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 8
-    dim_hidden: int = 8
+    dim_observation: int = 2
+    dim_action: int = 2
+    dim_state: int = 2
+    dim_reward: int = 1
+
+    dim_embed: int = 16
+    dim_hidden: int = 16
 
     # for GPT
-    dim_head: int = 8
+    dim_head: int = 16
     num_heads: int = 1
-    dim_ffn: int = 8 * 4
-    num_layers: int = 6
+    dim_ffn: int = 16 * 4
+    num_layers: int = 3
 
     # for CVAE
-    latent_size: int = 128
-    encoder_layer_sizes = [2, 32, 8]
-    decoder_layer_sizes = [32, 8, 2]
-    dim_condition: int = 128
+    latent_size: int = 16
+    dim_condition: int = 16
+    encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
+    decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -91,7 +96,7 @@ class Settings(Serializable):
     num_pred: int = 100
     current_step: int = 1
     print_in_out: bool = False
-    len_input: int = 15
+    len_input: int = 1
     num_input: int = 1
     num_output: int = 10
     
@@ -240,44 +245,44 @@ def predict_action(config, model, data):
     
 def main():
     # config_RNN = Settings(model='RNN', model_name='9.23_dropout0.1_RNN', resume='best.pth')
-    config_GPT = Settings(model='GPT', model_name='10.3_GPT_dim8_layer6', resume='best.pth')
-    config_CVAE = Settings(model='CVAE', model_name='10.3_CVAE_dim8_layer6', resume='best.pth')
+    # config_GPT = Settings(model='GPT', model_name='10.3_GPT_dim8_layer6', resume='best.pth')
+    config_CVAE = Settings(model='CVAE', model_name='10.10_CVAE_dim16', resume='best.pth')
 
-    dataset_path = os.path.join(os.getcwd(), config_GPT.path)
-    dataset_filename = config_GPT.test_file
-    device = config_GPT.device
+    dataset_path = os.path.join(os.getcwd(), config_CVAE.path)
+    dataset_filename = config_CVAE.test_file
+    device = config_CVAE.device
     # model_dir_RNN = os.path.join(config_RNN.exp_dir, config_RNN.model_name)
-    model_dir_GPT = os.path.join(config_GPT.exp_dir, config_GPT.model_name)
+    model_dir_GPT = os.path.join(config_CVAE.exp_dir, config_CVAE.model_name)
     model_dir_CVAE = os.path.join(config_CVAE.exp_dir, config_CVAE.model_name)
 
     with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
         dataset = pickle.load(f)
-    dataset = LightDarkDataset(config_GPT, dataset)
-    data, targets = collect_data(config_GPT, dataset)
+    dataset = LightDarkDataset(config_CVAE, dataset)
+    data, targets = collect_data(config_CVAE, dataset)
 
     # with open(os.path.join(dataset_path, 'light_dark_sample_len15.pickle'), 'rb') as f:
     #     sample = pickle.load(f)
     # data, targets = sample['data'], sample['targets']
 
     # model_RNN = RNN(config_RNN).to(device)
-    model_GPT = GPT2(config_GPT).to(device)
+    model_GPT = GPT2(config_CVAE).to(device)
     model_CVAE = CVAE(config_CVAE).to(device)
     
     # optimizer_RNN = th.optim.AdamW(model_RNN.parameters(),
     #                            lr=config_RNN.learning_rate,
     #                            weight_decay=config_RNN.weight_decay)
-    optimizer_GPT = th.optim.AdamW(model_GPT.parameters(),
-                               lr=config_GPT.learning_rate,
-                               weight_decay=config_GPT.weight_decay)
+    # optimizer_GPT = th.optim.AdamW(model_GPT.parameters(),
+    #                            lr=config_GPT.learning_rate,
+    #                            weight_decay=config_GPT.weight_decay)
     optimizer_CVAE = th.optim.AdamW(model_CVAE.parameters(),
                                lr=config_CVAE.learning_rate,
                                weight_decay=config_CVAE.weight_decay)
     
-    if config_GPT.optimizer == 'AdamW':
+    if config_CVAE.optimizer == 'AdamW':
         # scheduler_RNN = th.optim.lr_scheduler.LambdaLR(optimizer_RNN, lambda step: min((step+1)/config_RNN.warmup_step, 1))
-        scheduler_GPT = th.optim.lr_scheduler.LambdaLR(optimizer_GPT, lambda step: min((step+1)/config_GPT.warmup_step, 1))
+        # scheduler_GPT = th.optim.lr_scheduler.LambdaLR(optimizer_GPT, lambda step: min((step+1)/config_GPT.warmup_step, 1))
         scheduler_CVAE = th.optim.lr_scheduler.LambdaLR(optimizer_CVAE, lambda step: min((step+1)/config_CVAE.warmup_step, 1))
-    elif config_GPT.optimizer == 'AdamWR':
+    elif config_CVAE.optimizer == 'AdamWR':
         # scheduler_RNN = CosineAnnealingWarmUpRestarts(
         #     optimizer=optimizer_RNN,
         #     T_0=config_RNN.T_0,
@@ -286,14 +291,14 @@ def main():
         #     T_up=config_RNN.warmup_step,
         #     gamma=config_RNN.lr_mult
         # )
-        scheduler_GPT = CosineAnnealingWarmUpRestarts(
-            optimizer=optimizer_GPT,
-            T_0=config_GPT.T_0,
-            T_mult=config_GPT.T_mult,
-            eta_max=config_GPT.lr_max,
-            T_up=config_GPT.warmup_step,
-            gamma=config_GPT.lr_mult
-        )
+        # scheduler_GPT = CosineAnnealingWarmUpRestarts(
+        #     optimizer=optimizer_GPT,
+        #     T_0=config_GPT.T_0,
+        #     T_mult=config_GPT.T_mult,
+        #     eta_max=config_GPT.lr_max,
+        #     T_up=config_GPT.warmup_step,
+        #     gamma=config_GPT.lr_mult
+        # )
         scheduler_CVAE = CosineAnnealingWarmUpRestarts(
             optimizer=optimizer_CVAE,
             T_0=config_CVAE.T_0,
@@ -304,14 +309,14 @@ def main():
         )
     else:
         # |FIXME| using error?exception?logging?
-        print(f'"{config_GPT.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
+        print(f'"{config_CVAE.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
         return
 
 
     # load checkpoint for resuming
-    if config_GPT.resume is not None:
+    if config_CVAE.resume is not None:
         # filename_RNN = os.path.join(model_dir_RNN, config_RNN.resume)
-        filename_GPT = os.path.join(model_dir_GPT, config_GPT.resume)
+        # filename_GPT = os.path.join(model_dir_GPT, config_GPT.resume)
         filename_CVAE = os.path.join(model_dir_CVAE, config_CVAE.resume)
 
         # if os.path.isfile(filename_RNN):
@@ -323,14 +328,14 @@ def main():
         #     print("No checkpoint found at '{}'".format(config_RNN.resume))
         #     return
 
-        if os.path.isfile(filename_GPT):
-            start_epoch_GPT, best_error_GPT, model_GPT, optimizer_GPT, scheduler_GPT = load_checkpoint(config_GPT, filename_GPT, model_GPT, optimizer_GPT, scheduler_GPT)
-            start_epoch_GPT += 1
-            print("[GPT]Loaded checkpoint '{}' (epoch {})".format(config_GPT.resume, start_epoch_GPT))
-        else:
-            # |FIXME| using error?exception?logging?
-            print("No checkpoint found at '{}'".format(config_GPT.resume))
-            return
+        # if os.path.isfile(filename_GPT):
+        #     start_epoch_GPT, best_error_GPT, model_GPT, optimizer_GPT, scheduler_GPT = load_checkpoint(config_GPT, filename_GPT, model_GPT, optimizer_GPT, scheduler_GPT)
+        #     start_epoch_GPT += 1
+        #     print("[GPT]Loaded checkpoint '{}' (epoch {})".format(config_GPT.resume, start_epoch_GPT))
+        # else:
+        #     # |FIXME| using error?exception?logging?
+        #     print("No checkpoint found at '{}'".format(config_GPT.resume))
+        #     return
 
         if os.path.isfile(filename_CVAE):
             start_epoch_CVAE, best_error_CVAE, model_CVAE, optimizer_CVAE, scheduler_CVAE = load_checkpoint(config_CVAE, filename_CVAE, model_CVAE, optimizer_CVAE, scheduler_CVAE)
@@ -348,16 +353,16 @@ def main():
     total_time_GPT = 0.
     total_time_CVAE = 0.
     for d in data:
-        for i in range(config_GPT.num_output):
+        for i in range(config_CVAE.num_output):
             # tmp_pred_RNN, time_RNN = predict_action(config_RNN, model_RNN, d)
-            tmp_pred_GPT, time_GPT = predict_action(config_GPT, model_GPT, d)
+            # tmp_pred_GPT, time_GPT = predict_action(config_GPT, model_GPT, d)
             tmp_pred_CVAE, time_CVAE = predict_action(config_CVAE, model_CVAE, d)
 
             # pred_RNN.append(tmp_pred_RNN)
-            pred_GPT.append(tmp_pred_GPT)
+            # pred_GPT.append(tmp_pred_GPT)
             pred_CVAE.append(tmp_pred_CVAE)
             # total_time_RNN += time_RNN
-            total_time_GPT += time_GPT
+            # total_time_GPT += time_GPT
             total_time_CVAE += time_CVAE
     
     targets = np.asarray(targets).reshape(-1, 2)
@@ -366,14 +371,14 @@ def main():
     pred_CVAE = np.asarray(pred_CVAE).reshape(-1, 2)
 
     # print(f'Inference time for RNN: {total_time_RNN / (config_RNN.num_input * config_RNN.num_output)}')
-    print(f'Inference time for GPT: {total_time_GPT / (config_GPT.num_input * config_GPT.num_output)}')
+    # print(f'Inference time for GPT: {total_time_GPT / (config_GPT.num_input * config_GPT.num_output)}')
     print(f'Inference time for CVAE: {total_time_CVAE / (config_CVAE.num_input * config_CVAE.num_output)}')
 
     plt.xlim(-7, 7)
     plt.ylim(-7, 7)
     plt.scatter(targets[:,0], targets[:,1], c='red')
     # plt.scatter(pred_RNN[:,0], pred_RNN[:,1], c='green')
-    plt.scatter(pred_GPT[:,0], pred_GPT[:,1], c='blue')
+    # plt.scatter(pred_GPT[:,0], pred_GPT[:,1], c='blue')
     plt.scatter(pred_CVAE[:,0], pred_CVAE[:,1], c='black')
     plt.show()
 

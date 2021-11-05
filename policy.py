@@ -27,27 +27,22 @@ class Settings(Serializable):
     model: str = 'CVAE' # GPT or RNN
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 8
-    dim_hidden: int = 8
-    dim_head: int = 8
+    dim_embed: int = 16
+    dim_hidden: int = 16
+
+    # for GPT
+    dim_head: int = 16
     num_heads: int = 1
-    dim_ffn: int = 8 * 4
-
-    num_layers: int = 6
-
-    train_pos_en: bool = False
-    use_reward: bool = True
-    use_mask_padding: bool = True
-    coefficient_loss: float = 1e-3
-
-    dropout: float = 0.0
-    action_tanh: bool = False
+    dim_ffn: int = 16 * 4
+    num_layers: int = 3
     
     # for CVAE
-    latent_size: int = 128
-    encoder_layer_sizes = [2, 32, 8]
-    decoder_layer_sizes = [32, 8, 2]
-    dim_condition: int = 128
+    latent_size: int = 16
+    dim_condition: int = 16
+    encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
+    decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
+    # encoder_layer_sizes = [dim_embed, latent_size]
+    # decoder_layer_sizes = [latent_size, dim_action]
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -77,7 +72,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '10.3_CVAE_dim8_layer6'
+    model_name: str = '10.10_CVAE_dim16'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs

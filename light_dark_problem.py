@@ -598,27 +598,35 @@ class LightDarkViz:
 
 
 def main():
-    plotting = False
+    plotting = None
     save_log = False
-    save_data = False
+    save_data = True
+    name_dataset = 'mcts_1_40'
 
     guide = True
     rollout_guide = False
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 50
+    num_planning = 2000
     num_particles = 100
     init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'result/dataset','long_1K')
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', name_dataset)
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
     log_time = []
-    log_val_success =[]
-    log_val_fail = []
+    log_total_reward = []
+    log_sim_success_rate = []
+    log_val_root_success_traj_avg = []
+    log_val_action_success_traj_avg = []
+    log_val_root_fail_traj_avg = []
+    log_val_action_fail_traj_avg = []
+    log_val_root_step = []
+    log_val_action_step = []
+    # log_sim_success_rate_step1 = []
 
     if guide:
         nn_config = Settings()
@@ -678,9 +686,13 @@ def main():
         print("==== Planning ====")
         total_reward = 0
         total_num_sims = 0
+        total_num_sims_success = 0
         total_plan_time = 0.0
         log_time_each = []
-        log_val_each = []
+        log_val_each_root = []
+        log_val_each_action = []
+        traj_data = []
+
         for i in range(planning_horizon):
             logging = save_log and i==0
             if i == 0:
@@ -700,12 +712,15 @@ def main():
 
             print("==== Step %d ====" % (i+1))
 
-            best_action, time_taken, sims_count, tree_value = planner.plan(light_dark_problem.agent, i, logging, save_data, guide, rollout_guide)
+            best_action, time_taken, sims_count, sims_count_success, root_value, action_value, step_data = planner.plan(light_dark_problem.agent, i, logging, save_data, guide, rollout_guide)
             
+            traj_data.append(step_data)
             log_time_each.append(time_taken)
-            log_val_each.append(tree_value)
+            log_val_each_root.append(root_value)
+            log_val_each_action.append(action_value)
             log_time_each_avg = np.mean(np.asarray(log_time_each))
-            log_val_each_avg = np.mean(np.asarray(log_val_each))
+            log_val_each_root_avg = np.mean(np.asarray(log_val_each_root))
+            log_val_each_action_avg = np.mean(np.asarray(log_val_each_action))
 
             # |FIXME|
             next_state = light_dark_problem.agent.transition_model.sample(light_dark_problem.env.state, best_action)
@@ -715,18 +730,21 @@ def main():
             # real_observation = random.choice(list(planner._agent.tree[best_action].children.keys()))
             
             total_num_sims += sims_count
+            total_num_sims_success += sims_count_success
             total_plan_time += time_taken
 
             check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
             # |TODO| can move before update to avoid confusion state case and belief case?
             # By belief state
-            reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)
+            # reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)
             # # By true state
             # reward = light_dark_problem.env.reward_model.sample(next_state, best_action, next_state)
 
             # |NOTE| only take positive reward as achieving goal condition
-            if not check_goal:
-                reward = -1
+            if not check_goal: # if you want to use reward proportional to the number of particles which is satisfied the goal condition, use reward_model.sample().
+                reward = -1.
+            else:
+                reward = 100.
 
             total_reward = reward + discont_factor * total_reward
 
@@ -743,6 +761,9 @@ def main():
             print("Number of particles:", len(light_dark_problem.agent.cur_belief))
             print("Reward: %s" % str(reward))
             print("Num sims: %d" % sims_count)
+            print("Num sims success: %d" % sims_count_success)
+            # if i == 0:
+            #     log_sim_success_rate_step1.append(sims_count_success/sims_count)
             print("Plan time: %.5f" % time_taken)
             
             if plotting:
@@ -757,12 +778,17 @@ def main():
                 print("\n")
                 print("==== Success ====")
                 print("Total reward: %.5f" % total_reward)
+                log_total_reward.append(total_reward)
                 # print("History:", planner.history)
                 print("Total Num sims: %d" % total_num_sims)
+                print(f"Num sims success: {total_num_sims_success} ({100 * total_num_sims_success/total_num_sims}%)")
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_sucess += 1
          
-                log_val_success.append(log_val_each_avg)
+                log_val_root_success_traj_avg.append(log_val_each_root_avg)
+                log_val_action_success_traj_avg.append(log_val_each_action_avg)
+                log_val_root_step.append(log_val_each_root)
+                log_val_action_step.append(log_val_each_action)
                 
                 # # save data
                 # if save_data:
@@ -772,21 +798,30 @@ def main():
                 #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
                 
                 # Saving success history
+                # if save_data:
+                #     with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
+                #         pickle.dump(planner.history_data, f)
                 if save_data:
-                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
-                        pickle.dump(planner.history_data, f)
+                    traj_data.append(total_reward)
+                    with open(os.path.join(save_dir, f'{name_dataset}_{n}.pickle'), 'wb') as f:
+                        pickle.dump(traj_data, f)
                 
                 break
 
             elif i == planning_horizon-1:
                 print("==== Fail ====")
                 print("Total reward: %.5f" % total_reward)
+                log_total_reward.append(total_reward)
                 # print("History:", planner.history)
                 print("Total Num sims: %d" % total_num_sims)
+                print(f"Num sims success: {total_num_sims_success} ({100 * total_num_sims_success/total_num_sims}%)")
                 print("Total Plan time: %.5f" % total_plan_time)
                 num_fail += 1
 
-                log_val_fail.append(log_val_each_avg)
+                log_val_root_fail_traj_avg.append(log_val_each_root_avg)
+                log_val_action_fail_traj_avg.append(log_val_each_action_avg)
+                log_val_root_step.append(log_val_each_root)
+                log_val_action_step.append(log_val_each_action)
 
                 # # save data
                 # if save_data:
@@ -796,40 +831,78 @@ def main():
                 #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
 
                 # Saving fail history
+                # if save_data:
+                #     with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
+                #         pickle.dump(planner.history_data, f)
                 if save_data:
-                    with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
-                        pickle.dump(planner.history_data, f)
+                    traj_data.append(total_reward)
+                    with open(os.path.join(save_dir, f'{name_dataset}_{n}.pickle'), 'wb') as f:
+                        pickle.dump(traj_data, f)
             
-        if plotting:
+        if plotting is not None:
             viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
                                     1: [(0,0,0), (255,0,0)]},
                         path_styles={0: "--",
                                     1: "-"},
                         path_widths={0: 4,
                                     1: 1})
-            plt.show()
+            # plt.show()
+            plt.savefig(f'{plotting}.png')
 
         log_time.append(log_time_each_avg)
+        log_sim_success_rate.append(total_num_sims_success/total_num_sims)
 
         print("num_sucess: %d" % num_sucess)
         print("num_fail: %d" % num_fail)
 
+    sims_success_rate = np.mean(np.asarray(log_sim_success_rate))
     time_mean = np.mean(np.asarray(log_time))
     time_std = np.std(np.asarray(log_time))
-    val_success_mean = np.mean(np.asarray(log_val_success))
-    val_success_std = np.std(np.asarray(log_val_success))
-    val_fail_mean = np.mean(np.asarray(log_val_fail))
-    val_fail_std = np.std(np.asarray(log_val_fail))
+    avg_total_reward = np.mean(np.asarray(log_total_reward))
+    root_val_total = log_val_root_success_traj_avg + log_val_root_fail_traj_avg
+    action_val_total = log_val_action_success_traj_avg + log_val_action_fail_traj_avg
+    root_val_total_mean = np.mean(np.asarray(root_val_total))
+    action_val_total_mean = np.mean(np.asarray(action_val_total))
+    root_val_total_std = np.std(np.asarray(root_val_total))
+    action_val_total_std = np.std(np.asarray(action_val_total))
+    root_val_success_mean = np.mean(np.asarray(log_val_root_success_traj_avg))
+    action_val_success_mean = np.mean(np.asarray(log_val_action_success_traj_avg))
+    root_val_success_std = np.std(np.asarray(log_val_root_success_traj_avg))
+    action_val_success_std = np.std(np.asarray(log_val_action_success_traj_avg))
+    root_val_fail_mean = np.mean(np.asarray(log_val_root_fail_traj_avg))
+    action_val_fail_mean = np.mean(np.asarray(log_val_action_fail_traj_avg))
+    root_val_fail_std = np.std(np.asarray(log_val_root_fail_traj_avg))
+    action_val_fail_std = np.std(np.asarray(log_val_action_fail_traj_avg))
+
+    # val_step_1_2 = []
+    # for v in log_val_step:
+    #     val_step_1_2.append(v[0:2])
+    # val_step_1_2_mean = np.mean(np.asarray(val_step_1_2).reshape(-1, 2), axis=0)
+    # val_step_1_2_std = np.std(np.asarray(val_step_1_2).reshape(-1, 2), axis=0)
+    # sims_success_rate_step1 = np.mean(np.asarray(log_sim_success_rate_step1))
 
     print("====Finish===")
     print("total_num_sucess: %d" % num_sucess)
     print("total_num_fail: %d" % num_fail)
+    print(f"sims success rate: {sims_success_rate * 100}%")
     print("planning time(mean): %f" % time_mean)
     print("planning time(std): %f" % time_std)
-    print("value of tree(success/mean): %f" % val_success_mean)
-    print("value of tree(success/std): %f" % val_success_std)
-    print("value of tree(fail/mean): %f" % val_fail_mean)
-    print("value of tree(fail/std): %f" % val_fail_std)
+    print("Average of total reward: %f" % avg_total_reward)
+    print("value of tree(total/mean): %f" % root_val_total_mean)
+    print("value of tree(total/std): %f" % root_val_total_std)
+    print("value of tree(success/mean): %f" % root_val_success_mean)
+    print("value of tree(success/std): %f" % root_val_success_std)
+    print("value of tree(fail/mean): %f" % root_val_fail_mean)
+    print("value of tree(fail/std): %f" % root_val_fail_std)
+    print("value of action(total/mean): %f" % action_val_total_mean)
+    print("value of action(total/std): %f" % action_val_total_std)
+    print("value of action(success/mean): %f" % action_val_success_mean)
+    print("value of action(success/std): %f" % action_val_success_std)
+    print("value of action(fail/mean): %f" % action_val_fail_mean)
+    print("value of action(fail/std): %f" % action_val_fail_std)
+    # print("value of tree(mean@step 1,2):", val_step_1_2_mean)
+    # print("value of tree(std@step 1,2):", val_step_1_2_std)
+    # print(f"sims success rate(@step 1): {sims_success_rate_step1 * 100}%")
       
 
 if __name__ == '__main__':

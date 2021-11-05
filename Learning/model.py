@@ -274,8 +274,8 @@ class GPT2(nn.Module):
         # self.ln2 = nn.LayerNorm(self.dim_hidden)
 
         if config.model == 'CVAE':
-            self.fc_condi = nn.Sequential(nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition),
-                                          nn.Tanh())
+            # self.fc_condi = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)] + ([nn.Tanh()] if self.action_tanh else [])))
+            self.fc_condi = nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)
         else:
             self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
@@ -341,7 +341,8 @@ class GPT2(nn.Module):
             # print(f"Input of action predict FC:", dec_outputs)
 
         if self.config.model == 'CVAE':
-            out = self.fc_condi(dec_outputs.flatten(start_dim=1))
+            # out = self.fc_condi(dec_outputs.flatten(start_dim=1))
+            out = F.gelu(self.fc_condi(dec_outputs.flatten(start_dim=1)))
         else:    
             out = {}
             pred_action = self.predict_action(dec_outputs.flatten(start_dim=1))  # predict next action given state
@@ -562,6 +563,7 @@ class CVAE(nn.Module):
         assert type(self.encoder_layer_sizes) == list
         assert type(self.decoder_layer_sizes) == list
 
+        self.embed = nn.Linear(self.config.dim_action, self.config.dim_embed)
         self.encoder = CVAEEncoder(config)
         self.decoder = CVAEDecoder(config)
         # |TODO| make RNN, LSTM also available
@@ -570,6 +572,8 @@ class CVAE(nn.Module):
     def forward(self, data):
         # For training
         x = data['next_action'].squeeze()
+        x = F.gelu(self.embed(x))
+
         c = self.condition(data).squeeze()
 
         mean, log_var = self.encoder(x, c)

@@ -52,9 +52,9 @@ class Settings(Serializable):
 
     # for CVAE
     latent_size: int = 16
-    encoder_layer_sizes = [2, 32, 16]
-    decoder_layer_sizes = [16, 32, 2]
     dim_condition: int = 16
+    encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
+    decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -83,7 +83,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '10.5_CVAE_latent16'
+    model_name: str = '10.12_CVAE_dim16_recur1_scratch'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -94,6 +94,9 @@ class Settings(Serializable):
     eff_grad: bool = False
     print_num_para: bool = False
     print_in_out: bool = False
+
+    # prediction
+    num_pred: int = 10 # for CVAE, NNMSE
 
 
 class MultiTargetEvaluator():
@@ -129,7 +132,14 @@ class MultiTargetEvaluator():
                 target = data['next_action'].reshape(-1, 2)
 
                 if self.config.model == 'CVAE':
-                    pred = {'action': self.model.inference(data)}
+                    pred_sample = []
+
+                    # generate multiple prediction for NNMSE
+                    for _ in range(self.config.num_pred):
+                        pred_sample.append(self.model.inference(data))
+
+                    pred = {'action': th.stack(pred_sample).reshape(-1, self.config.dim_action)}
+
                 else:
                     pred = self.model(data)
                     
@@ -152,9 +162,18 @@ class MultiTargetEvaluator():
         return test_val
 
 
-def nearest_MSE(pred: Dict, target: th.Tensor):
+def NMSE(pred: Dict, target: th.Tensor): # Nearest MSE (uni-prediction to multi-target)
     val = th.norm((pred['action'] - target), 2, dim=-1)
     val = th.min(val)
+    return val
+
+# |NOTE| change to faster
+def NNMSE(pred: Dict, target: th.Tensor): # Near-Nearest MSE (multi-prediction to multi-target)
+    mse = th.empty(pred['action'].size(0), target.size(0)).fill_(1e9)
+    for m in range(pred['action'].size(0)):
+        for n in range(target.size(0)):
+            mse[m][n] = th.norm(pred['action'][m] - target[n], 2)
+    val = th.min(mse)
     return val
 
 
@@ -211,7 +230,10 @@ def main():
         raise Exception(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
 
     # Metric
-    eval_fn = nearest_MSE
+    if config.model == 'CVAE':
+        eval_fn = NNMSE
+    else:
+        eval_fn = NMSE
 
     # Trainer & Evaluator
 
@@ -234,7 +256,7 @@ def main():
         test_val = evaluator.eval(epoch)
             
         # Logging
-        logger.add_scalar('Eval/Nearest MSE', test_val, epoch)
+        logger.add_scalar('Eval/Near-Nearest MSE', test_val, epoch)
         
         print(f'===== End {epoch} epoch =====')
 

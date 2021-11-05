@@ -9,7 +9,7 @@ import math
 import pickle
 import numpy as np
 
-import pdb
+# import pdb
 
 
 class POMCPOW(Planner):
@@ -53,7 +53,8 @@ class POMCPOW(Planner):
         # dict: {key: str(sims_count), value: Tuple(log_path: list[np.array], total_reward: float)}
         self.log = {}
         self.path = None
-        self.history_data = []
+        # self.history_data = []
+        self.sims_count_success = 0
 
 
     @property
@@ -103,7 +104,9 @@ class POMCPOW(Planner):
             # init_observation = agent._observation_model.sample(state, (0,0))
             # simulate_history = (((0,0), init_observation.position, state.position, 0),)
 
-            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_data=save_data, guide=guide, rollout_guide=rollout_guide)
+            # total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_data=save_data, guide=guide, rollout_guide=rollout_guide)
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, guide=guide, rollout_guide=rollout_guide)
+
 
             # ################################################################
             # print(f"=============End Simulation: {sims_count}=================")
@@ -123,7 +126,10 @@ class POMCPOW(Planner):
         best_action = self._agent.tree.argmax()
         self._last_num_sims = sims_count
         self._last_planning_time = time_taken
-        self._agent.tree.value = self._agent.tree[best_action].value
+
+        # |TODO| how to remove the local variable "num_sims_success"?
+        num_sims_success = self.sims_count_success
+        self.sims_count_success = 0
 
         # logging first planning's path, QNode
         if logging:
@@ -135,8 +141,28 @@ class POMCPOW(Planner):
                     log_value[key] = self._agent.tree.children[key].value
                 pickle.dump(log_value, f)
 
-        # print('Tree value:', self._agent.tree.value)
-        return best_action, time_taken, sims_count, self._agent.tree.value
+        # collect data using result of search: (history: tuple(a,o,s',r), next_actions: list[tuple, ...], p_action: np.array, num_visits_action: np.array, val_action: np.array, val_root: float) + total_reward(@finishing the problem)
+        sampled_action = []
+        val_action = []
+        num_visits_action = []
+        for k in self._agent.tree.children.keys():
+            sampled_action.append(k)
+            val_action.append(self._agent.tree.children[k].value)
+            num_visits_action.append(self._agent.tree.children[k].num_visits)
+        val_action = np.asarray(val_action)
+        num_visits_action = np.asarray(num_visits_action)
+        # |TODO| introduce the temperature factor?
+        p_action = num_visits_action/self._agent.tree.num_visits
+        val_root = np.dot(val_action, p_action).item()
+        self._agent.tree.value = val_root
+
+        data = (agent.history, sampled_action, p_action, num_visits_action, val_action, val_root)
+
+        # next_action: sampling with probabilty of p_action or best_action
+        # next_action = best_action
+        next_action = sampled_action[np.random.choice(np.arange(len(p_action)), p=p_action)]
+
+        return next_action, time_taken, sims_count, num_sims_success, val_root, self._agent.tree[best_action].value, data
 
     # |NOTE| uniformly random
     # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain
@@ -149,6 +175,23 @@ class POMCPOW(Planner):
 
     def _ActionProgWiden(self, vnode, history, state, guide, k_a=2, alpha_a=1/2):
         _history = vnode
+
+        # # For experiment
+        # # if len(history) == 1:
+        # #     test_action = (-2.5, -2.5)
+        # if len(history) == 1:
+        #     test_action = (2.5, -1.25)
+        # # elif len(history) == 2:
+        # #     test_action = (-5.0, -1.25)
+        # else:
+        #     test_action = self._NextAction(state)
+        
+        # if vnode[test_action] is None:
+        #     history_action_node = QNode(self._num_visits_init, self._value_init)
+        #     vnode[test_action] = history_action_node
+        
+        # return test_action
+
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             if guide:
                 _action, inference_time = self._agent._policy_model.sample(history)
@@ -167,7 +210,8 @@ class POMCPOW(Planner):
 
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, save_data, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    # def _simulate(self, state, history, root, parent, observation, depth, logging, save_data, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
         
@@ -240,8 +284,9 @@ class POMCPOW(Planner):
                 # ################################################################
 
                 # Saving success history
-                if save_data:
-                    self.history_data.append(history)
+                self.sims_count_success += 1
+                # if save_data:
+                #     self.history_data.append(history)
 
                 return total_reward
 
@@ -250,7 +295,8 @@ class POMCPOW(Planner):
             # print("call _rollout()")
             # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data, rollout_guide=rollout_guide)
+            # total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_data=save_data, rollout_guide=rollout_guide)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, rollout_guide=rollout_guide)
 
         else:
             # |NOTE| append s` to B(hao)
@@ -284,8 +330,9 @@ class POMCPOW(Planner):
                 # ################################################################
 
                 # Saving success history
-                if save_data:
-                    self.history_data.append(history)
+                self.sims_count_success += 1
+                # if save_data:
+                #     self.history_data.append(history)
 
                 return total_reward
 
@@ -300,7 +347,7 @@ class POMCPOW(Planner):
                                                                             observation,
                                                                             depth+nsteps,
                                                                             logging=logging,
-                                                                            save_data=save_data,
+                                                                            # save_data=save_data,
                                                                             guide=guide,
                                                                             rollout_guide=rollout_guide)
         
@@ -322,7 +369,8 @@ class POMCPOW(Planner):
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging, save_data, rollout_guide=False): # root<-class:VNode
+    # def _rollout(self, state, history, root, depth, logging, save_data, rollout_guide=False): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, rollout_guide=False): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
 
@@ -352,8 +400,9 @@ class POMCPOW(Planner):
                 # ################################################################
 
                 # Saving success history
-                if save_data:
-                    self.history_data.append(history)
+                self.sims_count_success += 1
+                # if save_data:
+                #     self.history_data.append(history)
 
                 return total_discounted_reward
 

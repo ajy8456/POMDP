@@ -290,6 +290,49 @@ class MultiTargetLightDarkDataset(Dataset):
 #         return out
 
 
+class MCTSLightDarkDataset(Dataset):
+    """
+    Get a train/test dataset according to the specified settings.
+    """
+    def __init__(self, config, dataset: List, transform=None):
+        self.config = config
+        self.dataset = dataset # list of data file name
+        self.transform = transform
+        
+        # for get_batch()
+        self.device = config.device
+        self.max_len = config.max_len
+        self.seq_len = config.seq_len
+        self.dim_observation = config.dim_observation
+        self.dim_action = config.dim_action
+        self.dim_state = config.dim_state
+        self.dim_reward = config.dim_reward
+
+        # # for WeightedRandomSampler
+        # self.p_sample = dataset['p_sample']
+
+    def __len__(self):
+        return len(self.dataset['observation'])
+
+    def __getitem__(self, index):
+        observation = self.dataset['observation'][index]
+        action = self.dataset['action'][index]
+        reward = self.dataset['reward'][index]
+        next_state = self.dataset['next_state'][index]
+        traj_len = self.dataset['traj_len'][index]
+        sample = {'observation': observation,
+                  'action': action,
+                  'reward': reward,
+                  'next_state': next_state,
+                  'traj_len': traj_len}
+        
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample    
+
+
+
 def get_loader(config, dataset: Dict,
                transform=None, collate_fn=None):
     dataset = LightDarkDataset(config, dataset, transform)
