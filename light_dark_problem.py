@@ -236,7 +236,7 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon=0.25):
+    def __init__(self, light, goal_state, epsilon):
         self.light = light
         self._goal_state = goal_state
         self._epsilon=epsilon
@@ -357,7 +357,7 @@ class LightDarkEnvironment(Environment):
 
 
 class LightDarkProblem(POMDP):
-    def __init__(self, init_state, init_belief, goal_state, light, const, guide_policy=None):
+    def __init__(self, init_state, init_belief, goal_state, light, const, epsilon, guide_policy=None):
         if guide_policy is not None:
             # nn_config = Settings()
             # guide_policy = NNRegressionPolicyModel(nn_config)
@@ -365,18 +365,18 @@ class LightDarkProblem(POMDP):
                       guide_policy,
                       TransitionModel(),
                       ObservationModel(light,const),
-                      RewardModel(light, goal_state))
+                      RewardModel(light, goal_state, epsilon))
         else:
             agent = Agent(init_belief,
                         PolicyModel(),
                         TransitionModel(),
                         ObservationModel(light,const),
-                        RewardModel(light, goal_state))
+                        RewardModel(light, goal_state, epsilon))
 
         env = LightDarkEnvironment(init_state,                  # init state
                                    light,                       # light
                                    const,                       # const
-                                   RewardModel(light, goal_state))     # reward model
+                                   RewardModel(light, goal_state, epsilon))     # reward model
         
         self.goal_state = goal_state
         
@@ -601,19 +601,31 @@ def main():
     plotting = None
     save_log = False
     save_data = True
-    name_dataset = 'mcts_1_40'
+    name_dataset = 'mcts_randomize_1_10'
 
-    guide = True
+    guide = False
     rollout_guide = False
+
+    # Environment Setting
+    # define the observation noise equation.
+    light = 5.0
+    const = 0.001
+    # define the radius of goal region
+    epsilon = 0.25
+
+    # planning horizon
+    planning_horizon = 30
+
+    # defines discount_factor
+    discont_factor = 0.9
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 2000
+    num_planning = 10000
     num_particles = 100
-    init_random_range = 0
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'Learning/dataset', name_dataset)
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_randomize_1')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
@@ -637,9 +649,19 @@ def main():
     for n in range(num_planning):
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
-        print("========================================================") 
-        init_state = State(tuple(2.5 + init_random_range * (np.random.rand(2) - 0.5)))
-        goal_state = State((0, 0))
+        print("========================================================")
+
+        # # fixed inital & goal state
+        # init_pos = (2.5, 2.5)
+        # goal_pos = (0, 0)
+
+        # randomize initial & goal state
+        init_pos = np.random.rand(2) * 3
+        init_pos[1] += 2
+        goal_pos = np.random.rand(2) - 0.5
+
+        init_state = State(tuple(init_pos))
+        goal_state = State(tuple(goal_pos))
 
         # inital belief state is uniformly distribution
         # init_belief = Histogram({})
@@ -655,19 +677,9 @@ def main():
             sample = State(tuple(np.asarray(init_state.position) + init_belief_std * (np.random.randn(2))))
             init_belief.append(sample)
         init_belief = Particles(init_belief)
-        
-        # defines the observation noise equation.
-        light = 5.0
-        const = 0.001
-
-        # planning horizon
-        planning_horizon = 30
-
-        # defines discount_factor
-        discont_factor = 0.9
-        
+               
         # creates POMDP model
-        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, guide_policy)
+        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, epsilon, guide_policy)
         # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
         light_dark_problem.agent.set_belief(init_belief)
 
@@ -802,6 +814,7 @@ def main():
                 #     with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
                 #         pickle.dump(planner.history_data, f)
                 if save_data:
+                    traj_data.append(goal_pos)
                     traj_data.append(total_reward)
                     with open(os.path.join(save_dir, f'{name_dataset}_{n}.pickle'), 'wb') as f:
                         pickle.dump(traj_data, f)
@@ -835,6 +848,7 @@ def main():
                 #     with open(os.path.join(save_dir, 'simulation_history_data.pickle'), 'ab') as f:
                 #         pickle.dump(planner.history_data, f)
                 if save_data:
+                    traj_data.append(goal_pos)
                     traj_data.append(total_reward)
                     with open(os.path.join(save_dir, f'{name_dataset}_{n}.pickle'), 'wb') as f:
                         pickle.dump(traj_data, f)

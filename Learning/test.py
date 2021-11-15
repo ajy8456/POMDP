@@ -1,4 +1,6 @@
 import os
+import glob
+import shutil
 import pickle
 import numpy as np
 from simple_parsing.helpers.serialization.serializable import D
@@ -156,10 +158,22 @@ import matplotlib.pyplot as plt
 # plt.show()
 
 
-num_sim = np.array([10, 50, 100, 500, 1000])
-success_rate_exec = np.array([[60, 67, 64, 50, 41], [33, 47, 46, 49, 56]])
-plt.plot(num_sim, success_rate_exec[0], label='max')
-plt.plot(num_sim, success_rate_exec[1], label='sampling')
-plt.xscale('log')
-plt.legend()
-plt.show()
+# num_sim = np.array([10, 50, 100, 500, 1000])
+# success_rate_exec = np.array([[60, 67, 64, 50, 41], [33, 47, 46, 49, 56]])
+# plt.plot(num_sim, success_rate_exec[0], label='max')
+# plt.plot(num_sim, success_rate_exec[1], label='sampling')
+# plt.xscale('log')
+# plt.legend()
+# plt.show()
+
+
+path = os.path.join(os.getcwd(), 'Learning/dataset/mcts_1')
+# print(path)
+file_list = glob.glob(path + '/*')
+# print(file_list)
+# print(len(file_list))
+file_list = [file for file in file_list if file.endswith(".pickle")]
+# print(len(file_list))
+
+for file in file_list:
+    shutil.move(file, path)

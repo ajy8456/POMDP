@@ -1,4 +1,5 @@
 import os
+import glob
 import time
 from dataclasses import dataclass, replace
 from simple_parsing import Serializable
@@ -20,9 +21,12 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    train_file: str = 'light_dark_tiny.pickle'
-    test_file: str = 'light_dark_tiny.pickle'
-    batch_size: int = 4096 # 100steps/epoch
+    data_type: str = 'mcts' # 'mcts' or 'success'
+    randomize: bool = False
+    filter: float = 51
+    train_file: str = 'mcts_1_train' # folder name - mcts / file name - success traj.
+    test_file: str = 'mcts_1_test'
+    batch_size: int = 1024 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
     max_len: int = 100
@@ -34,25 +38,25 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'GPT' # GPT or RNN or LSTM or CVAE
+    model: str = 'CVAE' # GPT or RNN or LSTM or CVAE
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 8
-    dim_hidden: int = 8
+    dim_embed: int = 16
+    dim_hidden: int = 16
 
     # for GPT
-    dim_head: int = 8
+    dim_head: int = 16
     num_heads: int = 1
-    dim_ffn: int = 8 * 4
+    dim_ffn: int = 16 * 4
     num_layers: int = 3
 
     # for CVAE
-    latent_size: int = 32
-    dim_condition: int = 32
-    # encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
-    # decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
-    encoder_layer_sizes = [dim_embed, latent_size]
-    decoder_layer_sizes = [latent_size, dim_action]
+    latent_size: int = 16
+    dim_condition: int = 16
+    encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
+    decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
+    # encoder_layer_sizes = [dim_embed, latent_size]
+    # decoder_layer_sizes = [latent_size, dim_action]
 
     train_pos_en: bool = False
     use_reward: bool = True
@@ -65,7 +69,7 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     resume: str = None # checkpoint file name for resuming
-    pre_trained: str = None # checkpoint file name for pre-trained model
+    pre_trained: str = '10.10_CVAE_dim16/best.pth' # checkpoint file name for pre-trained model
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
 
@@ -82,7 +86,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test'
+    model_name: str = '11.14_CVAE_mcts1_filtered'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -91,7 +95,7 @@ class Settings(Serializable):
     log_para: bool = False
     log_grad: bool = False
     eff_grad: bool = False
-    print_num_para: bool = True
+    print_num_para: bool = False
     print_in_out: bool = False
 
 
@@ -108,14 +112,34 @@ def main():
 
     logger = SummaryWriter(model_dir)
 
-    with open(os.path.join(dataset_path, train_filename), 'rb') as f:
-        train_dataset = pickle.load(f)
-    with open(os.path.join(dataset_path, test_filename), 'rb') as f:
-        test_dataset = pickle.load(f)
+    if config.data_type == 'success':
+        with open(os.path.join(dataset_path, train_filename), 'rb') as f:
+            train_dataset = pickle.load(f)
+        with open(os.path.join(dataset_path, test_filename), 'rb') as f:
+            test_dataset = pickle.load(f)
+        
+        print('#trajectories of train_dataset:', len(train_dataset['observation']))
+        print('#trajectories of test_dataset:', len(test_dataset['observation']))
     
-    print('#trajectories of train_dataset:', len(train_dataset['observation']))
-    print('#trajectories of test_dataset:', len(test_dataset['observation']))
+    elif config.data_type == 'mcts':
+        train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
 
+        if config.filter:
+            filtered_data = []
+            avg_total_reward = 0
+            for data in train_dataset:
+                with open(data, 'rb') as f:
+                    traj = pickle.load(f)
+                    if traj[-1] > config.filter:
+                        filtered_data.append(data)
+                        avg_total_reward += traj[-1]
+            print('Average of total reward:', avg_total_reward/len(filtered_data))
+        train_dataset = filtered_data
+    
+        print('#trajectories of train_dataset:', len(train_dataset))
+        print('#trajectories of test_dataset:', len(test_dataset))
+    
     # generate dataloader
     train_loader = get_loader(config, train_dataset)
     test_loader = get_loader(config, test_dataset)

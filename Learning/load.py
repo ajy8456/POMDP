@@ -1,4 +1,5 @@
 import os
+import glob
 import pickle
 import numpy as np
 import torch as th
@@ -298,52 +299,126 @@ class MCTSLightDarkDataset(Dataset):
         self.config = config
         self.dataset = dataset # list of data file name
         self.transform = transform
-        
-        # for get_batch()
-        self.device = config.device
-        self.max_len = config.max_len
-        self.seq_len = config.seq_len
-        self.dim_observation = config.dim_observation
-        self.dim_action = config.dim_action
-        self.dim_state = config.dim_state
-        self.dim_reward = config.dim_reward
-
-        # # for WeightedRandomSampler
-        # self.p_sample = dataset['p_sample']
 
     def __len__(self):
-        return len(self.dataset['observation'])
+        return len(self.dataset)
 
     def __getitem__(self, index):
-        observation = self.dataset['observation'][index]
-        action = self.dataset['action'][index]
-        reward = self.dataset['reward'][index]
-        next_state = self.dataset['next_state'][index]
-        traj_len = self.dataset['traj_len'][index]
-        sample = {'observation': observation,
-                  'action': action,
-                  'reward': reward,
-                  'next_state': next_state,
-                  'traj_len': traj_len}
+        traj = self.dataset[index]
+        with open(traj, 'rb') as f:
+            traj = pickle.load(f)
         
         if self.transform:
-            sample = self.transform(sample)
+            data = self.transform(traj)
+        
+        idx = np.random.choice(len(traj) - 2)
+        sample = traj[idx]
+        
+        history = np.asarray(sample[0])
+        actions = sample[1]
+        p_action = sample[2]
+        num_visit_action = sample[3]
+        val_node = sample[5]
+        if self.config.randomize:
+            goal_state = traj[-2]
+        total_reward = traj[-1]
 
-        return sample    
+        i = np.random.choice(len(actions), p=p_action)
+        sampled_next_action = actions[i]
+
+        data = {'action': history[:, 0].tolist(),
+                'observation': history[:, 1].tolist(),
+                'next_state': history[:, 2].tolist(),
+                'reward': history[:, 3].tolist(),
+                'next_action': sampled_next_action,
+                'total_reward': total_reward}
+        
+        if self.config.randomize:
+            data['goal_state'] = goal_state
+
+        return data
+
+
+class MCTSBatchMaker():
+    def __init__(self, config):
+        self.config = config
+        self.device = config.device
+        self.dim_action = config.dim_action
+        self.dim_observation = config.dim_observation
+        self.dim_state = config.dim_state
+        self.dim_reward = config.dim_reward
+        self.seq_len = config.seq_len
+
+
+    def __call__(self, data):
+        a, o, r, next_a, next_s, goal_s, timestep, mask = [], [], [], [], [], [], [], []
+        for d in data:
+            # get sequences from dataset
+            a.append(np.asarray(d['action']).reshape(1, -1, self.dim_action))
+            o.append(np.asarray(d['observation']).reshape(1, -1, self.dim_observation))
+            r.append(np.asarray(d['reward']).reshape(1, -1, self.dim_reward))
+            next_a.append(np.asarray(d['next_action']).reshape(1, -1, self.dim_action))
+            next_s.append(np.asarray(d['next_state']).reshape(1, -1, self.dim_state))
+            timestep.append(np.arange(len(d['action'])).reshape(1, -1))
+            timestep[-1][timestep[-1] >= self.seq_len] = self.seq_len - 1  # padding cutoff
+            if self.config.randomize:
+                goal_s.append(np.asarray(d['goal_state']).reshape(1, -1, self.dim_state))
+
+            # padding
+            # |FIXME| check padded value & need normalization?
+            tlen = o[-1].shape[1]
+            o[-1] = np.concatenate([np.zeros((1, self.seq_len - tlen, self.dim_observation)), o[-1]], axis=1)
+            a[-1] = np.concatenate([np.zeros((1, self.seq_len - tlen, self.dim_action)), a[-1]], axis=1)
+            # a[-1] = np.concatenate([np.ones((1, 31 - tlen, 2)) * -100., a[-1]], axis=1)
+            r[-1] = np.concatenate([np.zeros((1, self.seq_len - tlen, self.dim_reward)), r[-1]], axis=1)
+            next_s[-1] = np.concatenate([np.zeros((1, self.seq_len - tlen, self.dim_state)), next_s[-1]], axis=1)
+            timestep[-1] = np.concatenate([np.zeros((1, self.seq_len - tlen)), timestep[-1]], axis=1)
+            if self.config.randomize:
+                mask.append(np.concatenate([np.full((1, self.seq_len - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
+            else:
+                mask.append(np.concatenate([np.full((1, self.seq_len - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
+
+        o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        r = th.from_numpy(np.concatenate(r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.device))
+        mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
+        if self.config.randomize:
+            goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        
+        out = {'observation': o,
+            'action': a,
+            'reward': r,
+            'next_action': next_a,
+            'next_state': next_s,
+            'timestep': timestep,
+            'mask': mask}
+        
+        if self.config.randomize:
+            out['goal_state'] = goal_s
+
+        return out
+
 
 
 
 def get_loader(config, dataset: Dict,
                transform=None, collate_fn=None):
-    dataset = LightDarkDataset(config, dataset, transform)
+    if config.data_type == 'success':
+        dataset = LightDarkDataset(config, dataset, transform)
+        if collate_fn == None:
+            batcher = BatchMaker(config)
+    elif config.data_type == 'mcts':
+        dataset = MCTSLightDarkDataset(config, dataset, transform)
+        if collate_fn == None:
+            batcher = MCTSBatchMaker(config)
 
     if config.use_sampler:
         sampler = WeightedRandomSampler(dataset.p_sample, config.batch_size)
     else:
         sampler = None
-
-    if collate_fn == None:
-        batcher = BatchMaker(config)
 
     loader = DataLoader(dataset,
                         batch_size=config.batch_size,
@@ -365,9 +440,10 @@ if __name__ == '__main__':
     class Settings(Serializable):
         # Dataset
         path: str = 'Learning/dataset'
-        train_file: str = 'light_dark_long_train_400K.pickle'
-        test_file: str = 'light_dark_long_test_100K.pickle'
-        batch_size: int = 1 # 100steps/epoch
+        data_type: str = 'mcts' # 'mcts' or 'success'
+        train_file: str = 'mcts_1_test/train' # folder name - mcts / file name - success traj.
+        test_file: str = 'mcts_1_test/test'
+        batch_size: int = 2 # 100steps/epoch
         shuffle: bool = True # for using Sampler, it should be False
         use_sampler: bool = False
         max_len: int = 100
@@ -379,23 +455,25 @@ if __name__ == '__main__':
         dim_reward: int = 1
 
         # Architecture
-        model: str = 'GPT' # GPT or RNN or LSTM or CVAE
+        model: str = 'CVAE' # GPT or RNN or LSTM or CVAE
         optimizer: str = 'AdamW' # AdamW or AdamWR
 
-        dim_embed: int = 16
-        dim_hidden: int = 16
+        dim_embed: int = 8
+        dim_hidden: int = 8
 
         # for GPT
-        dim_head: int = 16
+        dim_head: int = 8
         num_heads: int = 1
-        dim_ffn: int = 16 * 4
-        num_layers: int = 4
+        dim_ffn: int = 8 * 4
+        num_layers: int = 3
 
         # for CVAE
-        latent_size: int = 128
-        encoder_layer_sizes = [2, 32, 16]
-        decoder_layer_sizes = [32, 16, 2]
-        dim_condition: int = 128
+        latent_size: int = 32
+        dim_condition: int = 32
+        # encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
+        # decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
+        encoder_layer_sizes = [dim_embed, latent_size]
+        decoder_layer_sizes = [latent_size, dim_action]
 
         train_pos_en: bool = False
         use_reward: bool = True
@@ -408,6 +486,7 @@ if __name__ == '__main__':
         # Training
         device: str = 'cuda' if th.cuda.is_available() else 'cpu'
         resume: str = None # checkpoint file name for resuming
+        pre_trained: str = None # checkpoint file name for pre-trained model
         # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
         epochs: int = 1000
 
@@ -424,28 +503,32 @@ if __name__ == '__main__':
 
         # Logging
         exp_dir: str = 'Learning/exp'
-        model_name: str = '10.4_GPT_dim16_layer4'
+        model_name: str = 'test'
         print_freq: int = 1000 # per train_steps
         train_eval_freq: int = 1000 # per train_steps
         test_eval_freq: int = 10 # per epochs
         save_freq: int = 100 # per epochs
 
-        log_para: bool = True
-        log_grad: bool = True
+        log_para: bool = False
+        log_grad: bool = False
         eff_grad: bool = False
-        print_num_para: bool = False
+        print_num_para: bool = True
         print_in_out: bool = False
 
 
     config = Settings()
     dataset_path = os.path.join(os.getcwd(), 'Learning/dataset')
-    dataset_filename = 'light_dark_long_mini.pickle'
+    dataset_filename = 'mcts_1_test/train'
 
-    with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
-        dataset = pickle.load(f)
-    print('#trajectories of test_dataset:', len(dataset['observation']))
+    # with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
+    #     dataset = pickle.load(f)
+    # print('#trajectories of test_dataset:', len(dataset['observation']))
 
-    data_loader = get_loader_multi_target(config, dataset)
+    dataset = glob.glob(f'{dataset_path}/{dataset_filename}/*.pickle')
+    print('#trajectories of train_dataset:', len(dataset))
+
+    data_loader = get_loader(config, dataset)
+    # data_loader = get_loader_multi_target(config, dataset)
 
     sample = next(iter(data_loader))
 

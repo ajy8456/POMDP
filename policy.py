@@ -47,14 +47,15 @@ class Settings(Serializable):
     train_pos_en: bool = False
     use_reward: bool = True
     use_mask_padding: bool = True
+    randomize: bool = False
     coefficient_loss: float = 1e-3
 
     dropout: float = 0.1
     action_tanh: bool = False
 
     # Training
-    device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    # device: str = 'cpu'
+    # device: str = 'cuda' if th.cuda.is_available() else 'cpu'
+    device: str = 'cpu'
     resume: str = 'best.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
@@ -72,7 +73,13 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '10.10_CVAE_dim16'
+    # model_name: str = '10.10_CVAE_dim16'
+    # model_name: str = '11.6_CVAE_mcts1'
+    # model_name: str = '11.9_CVAE_randomize1_wo_goal'
+    # model_name: str = '11.9_CVAE_randomize1'
+    # model_name: str = '11.9_CVAE_mcts2'
+    # model_name: str = '11.9_CVAE_mcts1_filtered'
+    model_name: str = '11.14_CVAE_mcts1_filtered'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -133,7 +140,7 @@ class NNRegressionPolicyModel(PolicyModel):
             else:
                 raise Exception("No checkpoint found at '{}'".format(config.resume))
 
-    def sample(self, history):
+    def sample(self, history, goal):
         """
         infer next_action using neural network
         args:
@@ -143,7 +150,7 @@ class NNRegressionPolicyModel(PolicyModel):
             infer_time(float)
         """
         # fitting form of traj to input of network
-        data = self._traj2data(history)
+        data = self._traj2data(history, goal)
 
         # predict next action
 
@@ -164,11 +171,11 @@ class NNRegressionPolicyModel(PolicyModel):
 
         return pred, infer_time
     
-    def _traj2data(self, history):
+    def _traj2data(self, history, goal):
         """
         interface matching for neural network 
         """
-        o, a, r, timestep, mask = [], [], [], [], []
+        o, a, r, goal_s, timestep, mask = [], [], [], [], [], []
         i = 2
 
         # get sequences from dataset
@@ -177,22 +184,31 @@ class NNRegressionPolicyModel(PolicyModel):
             o.append(h[1])
             r.append(h[3])
             timestep.append(i)
+        goal_s.append(goal)
         o = np.asarray(o).reshape(1, -1, 2)
         a = np.asarray(a).reshape(1, -1, 2)
         r = np.asarray(r).reshape(1, -1, 1)
+        goal_s = np.asarray(goal_s).reshape(1, -1, 2)
         timestep = np.asarray(timestep).reshape(1, -1)
 
         # padding
         tlen = timestep.shape[1]
+        if self.config.randomize:
+            mask.append(np.concatenate([np.full((1, self.config.seq_len - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
+        else:
+            mask.append(np.concatenate([np.full((1, self.config.seq_len - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
+
         o = th.from_numpy(np.concatenate([np.zeros((1, 31 - tlen, 2)), o], axis=1)).to(dtype=th.float32, device=th.device(self.config.device))
         a = th.from_numpy(np.concatenate([np.zeros((1, 31 - tlen, 2)), a], axis=1)).to(dtype=th.float32, device=th.device(self.config.device))
         r = th.from_numpy(np.concatenate([np.zeros((1, 31 - tlen, 1)), r], axis=1)).to(dtype=th.float32, device=th.device(self.config.device))
         timestep = th.from_numpy(np.concatenate([np.zeros((1, 31 - tlen)), timestep], axis=1)).to(dtype=th.long, device=th.device(self.config.device))
-        mask = th.from_numpy(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1)).to(device=th.device(self.config.device))
+        mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
+        goal_s = th.from_numpy(goal_s).to(dtype=th.float32, device=th.device(self.device))
 
         data = {'observation': o,
             'action': a,
             'reward': r,
+            'goal_state': goal_s,
             'timestep': timestep,
             'mask': mask}
 

@@ -233,6 +233,7 @@ class GPT2(nn.Module):
         self.config = config
         self.dim_observation = config.dim_observation
         self.dim_action = config.dim_action
+        self.dim_state = config.dim_state
         self.dim_reward = config.dim_reward
         self.dim_embed = config.dim_embed
         self.dim_hidden = config.dim_hidden
@@ -254,7 +255,12 @@ class GPT2(nn.Module):
                 self.embed = nn.Linear(self.dim_observation + self.dim_action + 1, self.dim_embed)
             else:
                 self.embed = nn.Linear(self.dim_observation + self.dim_action, self.dim_embed)
-    
+        
+        if self.config.randomize:
+            if self.config.use_mask_padding:
+                self.embed_goal = nn.Linear(self.dim_state + 1, self.dim_embed)
+            else:
+                self.embed_goal = nn.Linear(self.dim_state, self.dim_embed)
 
         # select trainable/fixed positional encoding
         if self.config.train_pos_en:
@@ -275,7 +281,10 @@ class GPT2(nn.Module):
 
         if config.model == 'CVAE':
             # self.fc_condi = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)] + ([nn.Tanh()] if self.action_tanh else [])))
-            self.fc_condi = nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)
+            if config.randomize:
+                self.fc_condi = nn.Linear((self.seq_len + 1) * self.dim_hidden, self.config.dim_condition)
+            else:
+                self.fc_condi = nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)
         else:
             self.predict_action = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.dim_action)] + ([nn.Tanh()] if self.action_tanh else [])))
 
@@ -288,15 +297,25 @@ class GPT2(nn.Module):
             inputs = th.cat((data['observation'], data['action'], data['reward']), dim=-1)
         else:
             inputs = th.cat((data['observation'], data['action']), dim=-1)
-        
+
+
         if self.config.use_mask_padding:
-            mask = th.unsqueeze(data['mask'].float(), dim=-1)
-            inputs = th.cat((inputs, mask), dim=-1)
+            if self.config.randomize:
+                mask_goal = data['mask'][:, -1].float().reshape(-1, 1, 1)
+                inputs_goal= th.cat((data['goal_state'], mask_goal), dim=-1)
+                mask = th.unsqueeze(data['mask'][:, :-1].float(), dim=-1)
+                inputs = th.cat((inputs, mask), dim=-1)
+            else:
+                mask = th.unsqueeze(data['mask'].float(), dim=-1)
+                inputs = th.cat((inputs, mask), dim=-1)
 
         # if self.config.print_in_out:
         #     print("Input of embedding:", inputs)
 
-        input_embeddings = F.gelu(self.embed(inputs))
+        if self.config.randomize:
+            input_embeddings = F.gelu(th.cat((self.embed(inputs), self.embed_goal(inputs_goal)), dim=1))
+        else:
+            input_embeddings = F.gelu(self.embed(inputs))
 
         # if self.config.print_in_out:
         #     print("Output of embedding:", input_embeddings)

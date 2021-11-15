@@ -1,4 +1,5 @@
 import os
+import glob
 import pickle
 import numpy as np
 
@@ -21,12 +22,19 @@ data_dir = os.path.join(os.getcwd(), 'Learning/dataset')
 
 #     print(f'Loading #{ver} is finished!')
 
-with open(os.path.join(data_dir, 'mcts_1_test/mcts_1_test_0.pickle'), 'rb') as f:
-    data1 = pickle.load(f)
-with open(os.path.join(data_dir, 'mcts_1_test/mcts_1_test_1.pickle'), 'rb') as f:
-    data2 = pickle.load(f)
+# with open(os.path.join(data_dir, 'mcts_1_test/mcts_1_test_0.pickle'), 'rb') as f:
+#     data1 = pickle.load(f)
+# with open(os.path.join(data_dir, 'mcts_1_test/mcts_1_test_1.pickle'), 'rb') as f:
+#     data2 = pickle.load(f)
 
-print('#total planning:', len(data1), len(data2))
+# print('#total planning:', len(data1), len(data2))
+
+
+dataset = glob.glob(f'{data_dir}/mcts_2_train/*.pickle')
+for d in dataset:
+    with open(d, 'rb') as f:
+        sample = pickle.load(f)
+        print(len(sample))
 
 # # save all path information into separate lists
 # print('='*20, 'saving', '='*20)

@@ -194,7 +194,8 @@ class POMCPOW(Planner):
 
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             if guide:
-                _action, inference_time = self._agent._policy_model.sample(history)
+                _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
+                # print("Inference time:", inference_time)
             else:
                 _action = self._NextAction(state)
 
@@ -517,7 +518,10 @@ class POMCPOW(Planner):
 
         # |NOTE| bootstrap filtering(when belief is represented by Particels)
         if isinstance(tree_belief, Particles):
+            # time_start = time.time()
             new_belief, prediction = bootstrap_filter(tree_belief, next_state, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief))
+            # time_end = time.time()
+            # print("Bootstrap filtering time:", time_end - time_start)
             check_goal = env.reward_model.is_goal_particles(prediction)
             agent.set_belief(new_belief)
 
