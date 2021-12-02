@@ -39,10 +39,15 @@ class LightDarkDataset(Dataset):
         reward = self.dataset['reward'][index]
         next_state = self.dataset['next_state'][index]
         traj_len = self.dataset['traj_len'][index]
+        goal_state = self.dataset['goal_state'][index]
+        total_reward = self.dataset['total_reward'][index]
+
         sample = {'observation': observation,
                   'action': action,
                   'reward': reward,
                   'next_state': next_state,
+                  'goal_state': goal_state,
+                  'total_reward': total_reward,
                   'traj_len': traj_len}
         
         if self.transform:
@@ -57,7 +62,7 @@ class BatchMaker():
         self.device = config.device
 
     def __call__(self, data):
-        o, a, r, next_a, next_s, next_r, timestep, mask = [], [], [], [], [], [], [], []
+        o, a, r, next_a, next_s, next_r, goal_s, total_r, timestep, mask = [], [], [], [], [], [], [], [], [], []
         for traj in data:
             if len(traj['observation']) == 2:
                 i = 1
@@ -71,6 +76,8 @@ class BatchMaker():
             next_a.append(traj['action'][i].reshape(1, -1, 2))
             next_r.append(traj['reward'][i].reshape(1, -1, 1))
             next_s.append(traj['next_state'][1:i+1].reshape(1, -1, 2))
+            total_r.append(traj['total_reward'])
+            # goal_s.append(traj['goal_state'].reshape(1, -1, 2))
             timestep.append(np.arange(0, i).reshape(1, -1))
             timestep[-1][timestep[-1] >= 31] = 31 - 1  # padding cutoff
 
@@ -84,6 +91,7 @@ class BatchMaker():
             next_s[-1] = np.concatenate([np.zeros((1, 31 - tlen, 2)), next_s[-1]], axis=1)
             timestep[-1] = np.concatenate([np.zeros((1, 31 - tlen)), timestep[-1]], axis=1)
             mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
+            # mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
 
         o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
@@ -91,6 +99,8 @@ class BatchMaker():
         next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_r = th.from_numpy(np.concatenate(next_r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
+        total_r = th.from_numpy(np.asarray(total_r).reshape(-1, 1)).to(dtype=th.float32, device=th.device(self.config.device))
+        # goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.device))
         mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
         
@@ -100,6 +110,8 @@ class BatchMaker():
             'next_action': next_a,
             'next_reward': next_r,
             'next_state': next_s,
+            # 'goal_state': goal_s,
+            'total_reward': total_r,
             'timestep': timestep,
             'mask': mask}
 
@@ -134,11 +146,16 @@ class MultiTargetLightDarkDataset(Dataset):
         reward = self.dataset['reward'][index]
         next_state = self.dataset['next_state'][index]
         traj_len = self.dataset['traj_len'][index]
+        goal_state = self.dataset['goal_state'][index]
+        total_reward = self.dataset['total_reward'][index]
+
         traj = {'observation': observation,
                   'action': action,
                   'reward': reward,
                   'next_state': next_state,
-                  'traj_len': traj_len}
+                  'traj_len': traj_len,
+                  'goal_state': goal_state,
+                  'total_reward': total_reward}
 
         if len(traj['observation']) == 2:
             i = 1
@@ -154,13 +171,15 @@ class MultiTargetLightDarkDataset(Dataset):
 
     def _collect_target(self, traj, i):
         # truncate & fit interface of sample to model
-        o, a, r, next_a, next_s, next_r, timestep, mask = [], [], [], [], [], [], [], []
+        o, a, r, next_a, next_s, next_r, goal_s, total_r, timestep, mask = [], [], [], [], [], [], [], [], [], []
         o.append(traj['observation'][:i].reshape(-1, 2))
         a.append(traj['action'][:i].reshape(-1, 2))
         r.append(traj['reward'][:i].reshape(-1, 1))
         next_a.append(np.round(traj['action'][i], 4).reshape(-1, 2))
         next_r.append(traj['reward'][i].reshape(-1, 1))
         next_s.append(traj['next_state'][1:i+1].reshape(-1, 2))
+        total_r.append(traj['total_reward'])
+        goal_s.append(traj['goal_state'].reshape(1, -1, 2))
         timestep.append(np.arange(0, i))
         timestep[-1][timestep[-1] >= 31] = 31 - 1  # padding cutoff
 
@@ -209,7 +228,8 @@ class MultiTargetLightDarkDataset(Dataset):
         r[-1] = np.concatenate([np.zeros((31 - tlen, 1)), r[-1]], axis=-2)
         next_s[-1] = np.concatenate([np.zeros((31 - tlen, 2)), next_s[-1]], axis=-2)
         timestep[-1] = np.concatenate([np.zeros((31 - tlen)), timestep[-1]])
-        mask.append(np.concatenate([np.full(31 - tlen, False, dtype=bool), np.full(tlen, True, dtype=bool)]))
+        # mask.append(np.concatenate([np.full(31 - tlen, False, dtype=bool), np.full(tlen, True, dtype=bool)]))
+        mask.append(np.concatenate([np.full((1, self.seq_len - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
 
         o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
@@ -217,6 +237,8 @@ class MultiTargetLightDarkDataset(Dataset):
         # next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         next_r = th.from_numpy(np.concatenate(next_r, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
+        total_r = th.from_numpy(np.asarray(total_r).reshape(-1, 1)).to(dtype=th.float32, device=th.device(self.config.device))
+        goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.config.device))
         mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.config.device))
 
@@ -230,6 +252,8 @@ class MultiTargetLightDarkDataset(Dataset):
             'next_action': next_a,
             'next_reward': next_r,
             'next_state': next_s,
+            'goal_state': goal_s,
+            'total_reward': total_r,
             'timestep': timestep,
             'mask': mask}
 

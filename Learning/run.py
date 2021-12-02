@@ -6,6 +6,7 @@ from simple_parsing import Serializable
 from typing import List
 import pickle
 import torch as th
+import numpy as np
 from tensorboardX import SummaryWriter
 
 from load import get_loader
@@ -24,7 +25,7 @@ class Settings(Serializable):
     data_type: str = 'mcts' # 'mcts' or 'success'
     randomize: bool = False
     filter: float = 51
-    train_file: str = 'mcts_1_train' # folder name - mcts / file name - success traj.
+    train_file: str = 'mcts_1,2_train' # folder name - mcts / file name - success traj.
     test_file: str = 'mcts_1_test'
     batch_size: int = 1024 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
@@ -69,7 +70,9 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     resume: str = None # checkpoint file name for resuming
-    pre_trained: str = '10.10_CVAE_dim16/best.pth' # checkpoint file name for pre-trained model
+    # pre_trained: str = None
+    # pre_trained: str = '11.23_CVAE_randomized/best.pth' # checkpoint file name for pre-trained model
+    pre_trained: str = '11.28_CVAE/best.pth' # checkpoint file name for pre-trained model
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
 
@@ -86,7 +89,7 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '11.14_CVAE_mcts1_filtered'
+    model_name: str = 'test'
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
@@ -126,16 +129,37 @@ def main():
         test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
 
         if config.filter:
-            filtered_data = []
-            avg_total_reward = 0
+            filtered_data_train = []
+            filtered_data_test = []
+            total_reward_filt = []
+            total_reward_not_filt = []
+            avg_total_reward_not_filt = 0
+            avg_total_reward_filt = 0
             for data in train_dataset:
                 with open(data, 'rb') as f:
                     traj = pickle.load(f)
+                    avg_total_reward_not_filt += traj[-1]
+                    total_reward_not_filt.append(traj[-1])
                     if traj[-1] > config.filter:
-                        filtered_data.append(data)
-                        avg_total_reward += traj[-1]
-            print('Average of total reward:', avg_total_reward/len(filtered_data))
-        train_dataset = filtered_data
+                        filtered_data_train.append(data)
+                        avg_total_reward_filt += traj[-1]
+                        total_reward_filt.append(traj[-1])
+
+            for data in test_dataset:
+                with open(data, 'rb') as f:
+                    traj = pickle.load(f)
+                    if traj[-1] > config.filter:
+                        filtered_data_test.append(data)
+                        
+            total_reward_not_filt_std = np.std(np.asarray(total_reward_not_filt))
+            total_reward_filt_std = np.std(np.asarray(total_reward_filt))
+            print('Average of total reward(not filtered):', avg_total_reward_not_filt/len(train_dataset))
+            print('std of total reward(not filtered):', total_reward_not_filt_std)
+            print('Average of total reward(filtered):', avg_total_reward_filt/len(filtered_data_train))
+            print('std of total reward(filtered):', total_reward_filt_std)
+            
+            train_dataset = filtered_data_train
+            test_dataset = filtered_data_test
     
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))

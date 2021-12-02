@@ -54,8 +54,8 @@ class Settings(Serializable):
     action_tanh: bool = False
 
     # Training
-    # device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    device: str = 'cpu'
+    device: str = 'cuda' if th.cuda.is_available() else 'cpu'
+    # device: str = 'cpu'
     resume: str = 'best.pth' # checkpoint file name for resuming
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
@@ -79,7 +79,13 @@ class Settings(Serializable):
     # model_name: str = '11.9_CVAE_randomize1'
     # model_name: str = '11.9_CVAE_mcts2'
     # model_name: str = '11.9_CVAE_mcts1_filtered'
-    model_name: str = '11.14_CVAE_mcts1_filtered'
+    # model_name: str = '11.14_CVAE_mcts1_filtered'
+    # model_name: str = '11.22_CVAE_mcts2_filltered'
+    # model_name: str = '11.23_CVAE_randomized'
+    # model_name: str = '11.28_CVAE'
+    model_name: str = '11.29_CVAE_mcts1_filtered'
+    # model_name: str = '11.29_CVAE_mcts1,2_filtered'
+    
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs

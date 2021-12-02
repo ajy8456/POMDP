@@ -158,22 +158,43 @@ import matplotlib.pyplot as plt
 # plt.show()
 
 
-# num_sim = np.array([10, 50, 100, 500, 1000])
-# success_rate_exec = np.array([[60, 67, 64, 50, 41], [33, 47, 46, 49, 56]])
-# plt.plot(num_sim, success_rate_exec[0], label='max')
-# plt.plot(num_sim, success_rate_exec[1], label='sampling')
+num_sim = np.array([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 500, 1000])
+success_rate_exec = np.array([[47.9, 84.1, 83.0, 80.9, 83.3, 81.6, 79.4, 75.9, 74.7, 70.5, 73.3, 51.2, 35.4, 33.0],
+                              [10.6, 48.2, 54.9, 56.0, 61.3, 61.8, 67.3, 65.5, 65.3, 68.4, 67.6, 72.1, 78.0, 74.5]])
+plt.plot(num_sim, success_rate_exec[0], label='Guided')
+plt.plot(num_sim, success_rate_exec[1], label='Unguided')
 # plt.xscale('log')
-# plt.legend()
-# plt.show()
+plt.legend()
+plt.show()
 
 
-path = os.path.join(os.getcwd(), 'Learning/dataset/mcts_1')
-# print(path)
-file_list = glob.glob(path + '/*')
-# print(file_list)
-# print(len(file_list))
-file_list = [file for file in file_list if file.endswith(".pickle")]
-# print(len(file_list))
+# path = os.path.join(os.getcwd(), 'Learning/dataset/mcts_1')
+# # print(path)
+# file_list = glob.glob(path + '/*')
+# # print(file_list)
+# # print(len(file_list))
+# file_list = [file for file in file_list if file.endswith(".pickle")]
+# # print(len(file_list))
 
-for file in file_list:
-    shutil.move(file, path)
+# for file in file_list:
+#     shutil.move(file, path)
+    
+    
+# dataset_path = os.path.join(os.getcwd(), 'Learning/dataset')
+# filename = 'mcts_1_train'
+# dataset = glob.glob(f'{dataset_path}/{filename}/*.pickle')
+# total_reward_success = []
+# total_reward_fail = []
+# for data in dataset:
+#     with open(data, 'rb') as f:
+#         traj = pickle.load(f)
+#         if traj[-1] > 50:
+#             total_reward_success.append(traj[-1])
+#         else:
+#             total_reward_fail.append(traj[-1])
+# print(np.asarray(total_reward_success).min())
+# print(np.asarray(total_reward_success).max())
+# print(np.asarray(total_reward_fail).min())
+# print(np.asarray(total_reward_fail).max())
+# # plt.hist(total_reward, bins=110, range=(-10, 100))
+# # plt.savefig('total_reward.png')
