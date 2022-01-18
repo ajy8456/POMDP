@@ -9,6 +9,8 @@ import numpy as np
 import sys
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
+from matplotlib import animation
+
 import time
 import pickle
 
@@ -485,7 +487,7 @@ class LightDarkViz:
         self._plot_init_state()
         # self._plot_initial_belief_pos()
         self._plot_initial_belief()
-        self._plot_state()
+        # self._plot_state()
         self._plot_log_belief()
         self._plot_log_belief_expectation()
 
@@ -510,7 +512,7 @@ class LightDarkViz:
             util.plot_circle(self._ax,
                              self._goal_pos,
                              0.25,  # tentative
-                             linewidth=1, edgecolor="blue",
+                             linewidth=3, edgecolor="orange",
                              zorder=3)
     
     def _plot_init_state(self):
@@ -534,6 +536,14 @@ class LightDarkViz:
         plt.scatter(p[0], p[1], c='r')
         plt.plot(p[0], p[1], c='r')
 
+        # for p in self._log_belief_expectation:
+        #     plt.scatter(p[0], p[1], c='r')
+        #     plt.plot(p[0], p[1], c='r')
+    
+    # def _animate(self, frame):
+    #     plt.scatter(frame[0], frame[1], c='r')
+    #     plt.plot(frame[0], frame[1], c='r')
+    #     return plt
 
     def _plot_path(self, colors, styles, linewidths):
         """Plot robot path"""
@@ -598,14 +608,16 @@ class LightDarkViz:
 
 
 def main():
-    plotting = None
+    plotting = 'test'
     save_log = False
     save_data = False
+    # save_sim_data = 'sim_success_10'
     save_sim_data = False
-    name_dataset = 'mcts_2_35'
-    exp = 'test'
+    # name_dataset = 'mcts_3_'
+    name_dataset = None
+    exp = False
 
-    guide = False
+    guide = True
     rollout_guide = False
 
     # Environment Setting
@@ -619,22 +631,24 @@ def main():
     planning_horizon = 30
 
     # defines discount_factor
-    discont_factor = 0.9
+    discont_factor = 1.0
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 10
-    num_particles = 1
+    num_planning = 1000
+    num_particles = 100
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_2')
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_3_train')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
             
     if save_sim_data:
-        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_sim1K_7')
+        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success')
         if not os.path.exists(save_dir_sim):
             os.mkdir(save_dir_sim)
+    else:
+        save_dir_sim = False
 
     if exp:
         log_dir = os.path.join(os.getcwd(), 'result/log')
@@ -664,6 +678,11 @@ def main():
         print("========================================================") 
         print("========================= %d-th ========================" % (n+1)) 
         print("========================================================")
+
+        if save_sim_data:
+            save_sim_name = f'{save_sim_data}_{n}'
+        else:
+            save_sim_name = False
 
         # fixed inital & goal state
         init_pos = (2.5, 2.5)
@@ -699,7 +718,7 @@ def main():
 
         # set planner
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
-                        discount_factor=discont_factor, exploration_const=math.sqrt(2),
+                        discount_factor=discont_factor, save_dir_sim=save_dir_sim, exploration_const=math.sqrt(2),
                         num_visits_init=0, value_init=0)
 
         # Visualization setting
@@ -738,7 +757,11 @@ def main():
 
             print("==== Step %d ====" % (i+1))
 
-            best_action, time_taken, sims_count, sims_count_success, root_value, action_value, step_data = planner.plan(light_dark_problem.agent, i, logging, save_sim_data, guide, rollout_guide)
+            if save_sim_name:
+                save_sim_name_ = f'{save_sim_name}_{i}'
+            else:
+                save_sim_name_ = False
+            best_action, time_taken, sims_count, sims_count_success, root_value, action_value, step_data = planner.plan(light_dark_problem.agent, i, logging, save_sim_name_, guide, rollout_guide)
             
             traj_data.append(step_data)
             log_time_each.append(time_taken)
@@ -824,16 +847,16 @@ def main():
                 #     with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
                 #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
                 
-                # Saving success history
-                if save_sim_data:
-                    if planner.history_data is None:
-                        pass
-                    else:
-                        sim_data = planner.history_data
-                        sim_data.append(goal_pos)
-                        sim_data.append(total_reward)
-                        with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
-                            pickle.dump(sim_data, f)
+                # # Saving success simulation history
+                # if save_sim_data:
+                #     if planner.history_data is None:
+                #         pass
+                #     else:
+                #         sim_data = planner.history_data
+                #         sim_data.append(goal_pos)
+                #         sim_data.append(total_reward)
+                #         with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
+                #             pickle.dump(sim_data, f)
                         
                 if save_data:
                     traj_data.append(goal_pos)
@@ -866,16 +889,16 @@ def main():
                 #     with open(os.path.join(save_dir,'fail_value.pickle'), 'ab') as f:
                 #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
 
-                # Saving fail history
-                if save_sim_data:
-                    if planner.history_data is None:
-                        pass
-                    else:
-                        sim_data = planner.history_data
-                        sim_data.append(goal_pos)
-                        sim_data.append(total_reward)
-                        with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
-                            pickle.dump(sim_data, f)
+                # # Saving fail history
+                # if save_sim_data:
+                #     if planner.history_data is None:
+                #         pass
+                #     else:
+                #         sim_data = planner.history_data
+                #         sim_data.append(goal_pos)
+                #         sim_data.append(total_reward)
+                #         with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
+                #             pickle.dump(sim_data, f)
                         
                 if save_data:
                     traj_data.append(goal_pos)

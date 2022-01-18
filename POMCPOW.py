@@ -2,6 +2,7 @@ from POMDP_framework import *
 from POMCP import *
 # |TODO| How to use light_dark_problem.State
 from light_dark_problem import State
+import os
 import copy
 import time
 import random
@@ -13,9 +14,9 @@ import numpy as np
 
 
 class POMCPOW(Planner):
-    def __init__(self, pomdp,
+    def __init__(self, pomdp, 
                  max_depth, planning_time=-1., num_sims=-1,
-                 discount_factor=0.9, exploration_const=math.sqrt(2),
+                 discount_factor=0.9, save_dir_sim=None, exploration_const=math.sqrt(2),
                  num_visits_init=0, value_init=0,
                  action_prior=None):
         """
@@ -53,7 +54,9 @@ class POMCPOW(Planner):
         # dict: {key: str(sims_count), value: Tuple(log_path: list[np.array], total_reward: float)}
         self.log = {}
         self.path = None
-        self.history_data = []
+        # self.history_data = []
+        self.save_dir_sim = save_dir_sim
+        self.num_sim_data = 0
         self.sims_count_success = 0
 
 
@@ -72,7 +75,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon, logging=False, save_sim_data=False, guide=False, rollout_guide=False):
+    def plan(self, agent, horizon, logging=False, save_sim_name=False, guide=False, rollout_guide=False):
         # Only works if the agent's belief is particles
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -104,7 +107,7 @@ class POMCPOW(Planner):
             # init_observation = agent._observation_model.sample(state, (0,0))
             # simulate_history = (((0,0), init_observation.position, state.position, 0),)
 
-            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_sim_data=save_sim_data, guide=guide, rollout_guide=rollout_guide)
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_sim_name=save_sim_name, guide=guide, rollout_guide=rollout_guide)
             # total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, guide=guide, rollout_guide=rollout_guide)
 
 
@@ -194,9 +197,29 @@ class POMCPOW(Planner):
 
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
             if guide:
+                # # Adding stochasticity
+                # if _history.num_visits%4 == 3:
+                #     _action = self._NextAction(state)
+                # else:
                 _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
-                # print("Inference time:", inference_time)
+                    # print("Inference time:", inference_time)
             else:
+                # # testing for optimal solution
+                # if len(history) == 1:
+                #     if vnode[(-2.5, -2.5)] is None:
+                #         history_action_node = QNode(self._num_visits_init, self._value_init)
+                #         vnode[(-2.5, -2.5)] = history_action_node
+                #     # if vnode[(2.5, -1.25)] is None:
+                #     #     history_action_node = QNode(self._num_visits_init, self._value_init)
+                #     #     vnode[(2.5, -1.25)] = history_action_node
+                #     _action = (2.5, -1.25)
+                # elif len(history) == 2:
+                #     if history[1][0][0] == 2.5:
+                #         # _action = (-state.position[0], -state.position[1])
+                #         _action = (-5.0, -1.25)
+                #     else:
+                #         _action = self._NextAction(state)
+                # else:
                 _action = self._NextAction(state)
 
             if vnode[_action] is None:
@@ -209,9 +232,15 @@ class POMCPOW(Planner):
         # print("call _ucb()")
         # ################################################################
 
+        # # testing for optimal solution
+        # if len(history) == 1:
+        #     a_candidate = [(-2.5,-2.5), (2.5,-1.25)]
+        #     a_idx = np.random.randint(0,2)
+        #     return a_candidate[a_idx]
+
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, save_sim_data, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, save_sim_name, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
     # def _simulate(self, state, history, root, parent, observation, depth, logging, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
@@ -286,9 +315,13 @@ class POMCPOW(Planner):
 
                 # Saving success history
                 self.sims_count_success += 1
-                if save_sim_data:
-                    self.history_data.append(history)
-
+                if save_sim_name:
+                    # self.history_data.append(history)
+                    sim_data = np.asarray(history)
+                    with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
+                        pickle.dump(sim_data, f)
+                    self.num_sim_data += 1
+                    
                 return total_reward
 
             # ################################################################
@@ -296,7 +329,7 @@ class POMCPOW(Planner):
             # print("call _rollout()")
             # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_sim_data=save_sim_data, rollout_guide=rollout_guide)
+            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_sim_name=save_sim_name, rollout_guide=rollout_guide)
             # total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, rollout_guide=rollout_guide)
 
         else:
@@ -332,8 +365,12 @@ class POMCPOW(Planner):
 
                 # Saving success history
                 self.sims_count_success += 1
-                if save_sim_data:
-                    self.history_data.append(history)
+                if save_sim_name:
+                    # self.history_data.append(history)
+                    sim_data = np.asarray(history)
+                    with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
+                        pickle.dump(sim_data, f)
+                    self.num_sim_data += 1
 
                 return total_reward
 
@@ -348,7 +385,7 @@ class POMCPOW(Planner):
                                                                             observation,
                                                                             depth+nsteps,
                                                                             logging=logging,
-                                                                            save_sim_data=save_sim_data,
+                                                                            save_sim_name=save_sim_name,
                                                                             guide=guide,
                                                                             rollout_guide=rollout_guide)
         
@@ -370,7 +407,7 @@ class POMCPOW(Planner):
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging, save_sim_data, rollout_guide=False): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, save_sim_name, rollout_guide=False): # root<-class:VNode
     # def _rollout(self, state, history, root, depth, logging, rollout_guide=False): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
@@ -402,9 +439,13 @@ class POMCPOW(Planner):
 
                 # Saving success history
                 self.sims_count_success += 1
-                if save_sim_data:
-                    self.history_data.append(history)
-
+                if save_sim_name:
+                    # self.history_data.append(history)
+                    sim_data = np.asarray(history)
+                    with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
+                        pickle.dump(sim_data, f)
+                    self.num_sim_data += 1
+                    
                 return total_discounted_reward
 
             else:

@@ -22,12 +22,13 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    data_type: str = 'mcts' # 'mcts' or 'success'
+    # data_type: str = 'mcts' # 'mcts' or 'success'
+    data_type: str = 'success' # 'mcts' or 'success'
     randomize: bool = False
     filter: float = 51
-    train_file: str = 'mcts_1,2_train' # folder name - mcts / file name - success traj.
-    test_file: str = 'mcts_1_test'
-    batch_size: int = 1024 # 100steps/epoch
+    train_file: str = 'sim_success' # folder name
+    test_file: str = 'sim_success'
+    batch_size: int = 8192 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
     max_len: int = 100
@@ -42,18 +43,26 @@ class Settings(Serializable):
     model: str = 'CVAE' # GPT or RNN or LSTM or CVAE
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
-    dim_embed: int = 16
-    dim_hidden: int = 16
+    # dim_embed: int = 16
+    # dim_hidden: int = 16
+    dim_embed: int = 128
+    dim_hidden: int = 128
 
     # for GPT
-    dim_head: int = 16
+    # dim_head: int = 16
+    # num_heads: int = 1
+    # dim_ffn: int = 16 * 4
+    # num_layers: int = 3
+    dim_head: int = 128
     num_heads: int = 1
-    dim_ffn: int = 16 * 4
+    dim_ffn: int = 128 * 3
     num_layers: int = 3
 
     # for CVAE
-    latent_size: int = 16
-    dim_condition: int = 16
+    # latent_size: int = 16
+    # dim_condition: int = 16
+    latent_size: int = 128
+    dim_condition: int = 128
     encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
     decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
     # encoder_layer_sizes = [dim_embed, latent_size]
@@ -69,10 +78,13 @@ class Settings(Serializable):
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    resume: str = None # checkpoint file name for resuming
-    # pre_trained: str = None
+    resume: str = 'ckpt_epoch_200.pth' # checkpoint file name for resuming
+    pre_trained: str = None
+    # pre_trained: str = '12.7_CVAE_mcts2/best.pth' # checkpoint file name for pre-trained model
     # pre_trained: str = '11.23_CVAE_randomized/best.pth' # checkpoint file name for pre-trained model
-    pre_trained: str = '11.28_CVAE/best.pth' # checkpoint file name for pre-trained model
+    # pre_trained: str = '11.29_CVAE_mcts1_filtered/best.pth' # checkpoint file name for pre-trained model
+    # pre_trained: str = '12.27_CVAE_sim_huge/best.pth' # checkpoint file name for pre-trained model
+    # pre_trained: str = '12.27_CVAE_sim_huge_x/best.pth' # checkpoint file name for pre-trained model
     # |NOTE| Large # of epochs by default, Such that the tranining would *generally* terminate due to `train_steps`.
     epochs: int = 1000
 
@@ -89,16 +101,18 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = 'test'
-    print_freq: int = 1000 # per train_steps
-    train_eval_freq: int = 1000 # per train_steps
+    model_name: str = '12.27_CVAE_sim_huge_x'
+    # model_name: str = '12.28_CVAE_huge_x_mcts2'
+    # model_name: str = '12.27_CVAE_mcts_3'
+    print_freq: int = 100 # per train_steps
+    train_eval_freq: int = 100 # per train_steps
     test_eval_freq: int = 10 # per epochs
-    save_freq: int = 100 # per epochs
+    save_freq: int = 10 # per epochs
 
     log_para: bool = False
     log_grad: bool = False
     eff_grad: bool = False
-    print_num_para: bool = False
+    print_num_para: bool = True
     print_in_out: bool = False
 
 
@@ -116,15 +130,24 @@ def main():
     logger = SummaryWriter(model_dir)
 
     if config.data_type == 'success':
-        with open(os.path.join(dataset_path, train_filename), 'rb') as f:
-            train_dataset = pickle.load(f)
-        with open(os.path.join(dataset_path, test_filename), 'rb') as f:
-            test_dataset = pickle.load(f)
+        # with open(os.path.join(dataset_path, train_filename), 'rb') as f:
+        #     train_dataset = pickle.load(f)
+        # with open(os.path.join(dataset_path, test_filename), 'rb') as f:
+        #     test_dataset = pickle.load(f)
+
+        dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
+        train_dataset = dataset[:6000000]
+        test_dataset = dataset[6000000:]
         
-        print('#trajectories of train_dataset:', len(train_dataset['observation']))
-        print('#trajectories of test_dataset:', len(test_dataset['observation']))
+        print('#trajectories of train_dataset:', len(train_dataset))
+        print('#trajectories of test_dataset:', len(test_dataset))
     
     elif config.data_type == 'mcts':
+        # dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        # train_dataset = dataset[:90000]
+        # test_dataset = dataset[90000:]
+
         train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
         test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
 

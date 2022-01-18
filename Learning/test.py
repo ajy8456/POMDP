@@ -8,6 +8,15 @@ import torch as th
 import matplotlib.pyplot as plt
 
 
+path: str = 'Learning/dataset'
+dataset_path = os.path.join(os.getcwd(), path)
+filename: str = 'sim_success' # folder name
+dataset = glob.glob(f'{dataset_path}/{filename}/*.pickle')
+for d in dataset:
+    if os.path.getsize(d) == 0:
+        print(d)
+
+
 # path: str = 'Learning/dataset'
 # dataset_path = os.path.join(os.getcwd(), path)
 # dataset_filename = 'light_dark_long_test_100K.pickle'
@@ -158,12 +167,19 @@ import matplotlib.pyplot as plt
 # plt.show()
 
 
-num_sim = np.array([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 500, 1000])
-success_rate_exec = np.array([[47.9, 84.1, 83.0, 80.9, 83.3, 81.6, 79.4, 75.9, 74.7, 70.5, 73.3, 51.2, 35.4, 33.0],
-                              [10.6, 48.2, 54.9, 56.0, 61.3, 61.8, 67.3, 65.5, 65.3, 68.4, 67.6, 72.1, 78.0, 74.5]])
-plt.plot(num_sim, success_rate_exec[0], label='Guided')
+# num_sim = np.array([1, 10, 20, 50, 100, 200, 500, 1000])
+# success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4, 28.0],
+#                               [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 78.0, 74.5],
+#                               [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2, 39.1]])
+num_sim = np.array([1, 10, 20, 50, 100, 200, 500])
+success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4],
+                              [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 73.0],
+                              [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2]])
+# plt.plot(num_sim, success_rate_exec[0], label='Guided(before)')
 plt.plot(num_sim, success_rate_exec[1], label='Unguided')
-# plt.xscale('log')
+plt.plot(num_sim, success_rate_exec[2], label='Guided')
+
+plt.xscale('log')
 plt.legend()
 plt.show()
 

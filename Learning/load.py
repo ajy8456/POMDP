@@ -13,47 +13,86 @@ class LightDarkDataset(Dataset):
     """
     Get a train/test dataset according to the specified settings.
     """
-    def __init__(self, config, dataset: Dict, transform=None):
+    def __init__(self, config, dataset: List, transform=None):
         self.config = config
-        self.dataset = dataset
+        self.dataset = dataset # list of data file name
         self.transform = transform
-        
-        # for get_batch()
-        self.device = config.device
-        self.max_len = config.max_len
-        self.seq_len = config.seq_len
-        self.dim_observation = config.dim_observation
-        self.dim_action = config.dim_action
-        self.dim_state = config.dim_state
-        self.dim_reward = config.dim_reward
-
-        # # for WeightedRandomSampler
-        # self.p_sample = dataset['p_sample']
 
     def __len__(self):
-        return len(self.dataset['observation'])
+        return len(self.dataset)
 
     def __getitem__(self, index):
-        observation = self.dataset['observation'][index]
-        action = self.dataset['action'][index]
-        reward = self.dataset['reward'][index]
-        next_state = self.dataset['next_state'][index]
-        traj_len = self.dataset['traj_len'][index]
-        goal_state = self.dataset['goal_state'][index]
-        total_reward = self.dataset['total_reward'][index]
-
-        sample = {'observation': observation,
-                  'action': action,
-                  'reward': reward,
-                  'next_state': next_state,
-                  'goal_state': goal_state,
-                  'total_reward': total_reward,
-                  'traj_len': traj_len}
+        traj = self.dataset[index]
+        with open(traj, 'rb') as f:
+            try:
+                traj = pickle.load(f)
+            except pickle.UnpicklingError:
+                pass
         
         if self.transform:
-            sample = self.transform(sample)
+            data = self.transform(traj)
+        
+        # print('========================================')
+        # print(traj)
+        action = np.asarray(traj[:, 0])
+        observation = traj[:, 1]
+        next_state = traj[:, 2]
+        reward = traj[:, 3]
+        # if self.config.randomize:
+        #     goal_state = traj[-2]
+        # total_reward = traj[-1]
 
-        return sample
+        data = {'action': action.tolist(),
+                'observation': observation.tolist(),
+                'next_state': next_state.tolist(),
+                'reward': reward.tolist()}
+        
+        # if self.config.randomize:
+        #     data['goal_state'] = goal_state
+
+        return data
+
+    # def __init__(self, config, dataset: Dict, transform=None):
+    #     self.config = config
+    #     self.dataset = dataset
+    #     self.transform = transform
+        
+    #     # for get_batch()
+    #     self.device = config.device
+    #     self.max_len = config.max_len
+    #     self.seq_len = config.seq_len
+    #     self.dim_observation = config.dim_observation
+    #     self.dim_action = config.dim_action
+    #     self.dim_state = config.dim_state
+    #     self.dim_reward = config.dim_reward
+
+    #     # # for WeightedRandomSampler
+    #     # self.p_sample = dataset['p_sample']
+
+    # def __len__(self):
+    #     return len(self.dataset['observation'])
+
+    # def __getitem__(self, index):
+    #     observation = self.dataset['observation'][index]
+    #     action = self.dataset['action'][index]
+    #     reward = self.dataset['reward'][index]
+    #     next_state = self.dataset['next_state'][index]
+    #     traj_len = self.dataset['traj_len'][index]
+    #     goal_state = self.dataset['goal_state'][index]
+    #     total_reward = self.dataset['total_reward'][index]
+
+    #     sample = {'observation': observation,
+    #               'action': action,
+    #               'reward': reward,
+    #               'next_state': next_state,
+    #               'goal_state': goal_state,
+    #               'total_reward': total_reward,
+    #               'traj_len': traj_len}
+        
+    #     if self.transform:
+    #         sample = self.transform(sample)
+
+    #     return sample
 
 
 class BatchMaker():
@@ -70,13 +109,13 @@ class BatchMaker():
                 i = np.random.randint(1, len(traj['observation']) - 1)
 
             # get sequences from dataset
-            o.append(traj['observation'][:i].reshape(1, -1, 2))
-            a.append(traj['action'][:i].reshape(1, -1, 2))
-            r.append(traj['reward'][:i].reshape(1, -1, 1))
-            next_a.append(traj['action'][i].reshape(1, -1, 2))
-            next_r.append(traj['reward'][i].reshape(1, -1, 1))
-            next_s.append(traj['next_state'][1:i+1].reshape(1, -1, 2))
-            total_r.append(traj['total_reward'])
+            o.append(np.asarray(traj['observation'])[:i].reshape(1, -1, 2))
+            a.append(np.asarray(traj['action'][:i]).reshape(1, -1, 2))
+            r.append(np.asarray(traj['reward'][:i]).reshape(1, -1, 1))
+            next_a.append(np.asarray(traj['action'])[i].reshape(1, -1, 2))
+            next_r.append(np.asarray(traj['reward'])[i].reshape(1, -1, 1))
+            next_s.append(np.asarray(traj['next_state'])[1:i+1].reshape(1, -1, 2))
+            # total_r.append(traj['total_reward'])
             # goal_s.append(traj['goal_state'].reshape(1, -1, 2))
             timestep.append(np.arange(0, i).reshape(1, -1))
             timestep[-1][timestep[-1] >= 31] = 31 - 1  # padding cutoff
@@ -99,7 +138,7 @@ class BatchMaker():
         next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_r = th.from_numpy(np.concatenate(next_r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
-        total_r = th.from_numpy(np.asarray(total_r).reshape(-1, 1)).to(dtype=th.float32, device=th.device(self.config.device))
+        # total_r = th.from_numpy(np.asarray(total_r).reshape(-1, 1)).to(dtype=th.float32, device=th.device(self.config.device))
         # goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.device))
         mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
@@ -111,7 +150,7 @@ class BatchMaker():
             'next_reward': next_r,
             'next_state': next_s,
             # 'goal_state': goal_s,
-            'total_reward': total_r,
+            # 'total_reward': total_r,
             'timestep': timestep,
             'mask': mask}
 

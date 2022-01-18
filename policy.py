@@ -29,16 +29,24 @@ class Settings(Serializable):
 
     dim_embed: int = 16
     dim_hidden: int = 16
+    # dim_embed: int = 128
+    # dim_hidden: int = 128
 
     # for GPT
     dim_head: int = 16
     num_heads: int = 1
     dim_ffn: int = 16 * 4
     num_layers: int = 3
+    # dim_head: int = 128
+    # num_heads: int = 1
+    # dim_ffn: int = 128 * 3
+    # num_layers: int = 3
     
     # for CVAE
     latent_size: int = 16
     dim_condition: int = 16
+    # latent_size: int = 128
+    # dim_condition: int = 128
     encoder_layer_sizes = [dim_embed, dim_embed + dim_condition, latent_size]
     decoder_layer_sizes = [latent_size, latent_size + dim_condition, dim_action]
     # encoder_layer_sizes = [dim_embed, latent_size]
@@ -83,9 +91,18 @@ class Settings(Serializable):
     # model_name: str = '11.22_CVAE_mcts2_filltered'
     # model_name: str = '11.23_CVAE_randomized'
     # model_name: str = '11.28_CVAE'
+    # model_name: str = '11.29_CVAE_mcts1,2_filtered_prev'
     model_name: str = '11.29_CVAE_mcts1_filtered'
-    # model_name: str = '11.29_CVAE_mcts1,2_filtered'
-    
+    # model_name: str = '12.7_CVAE_mcts2'
+    # model_name: str = '12.7_CVAE_mcts2_only'
+    # model_name: str = '12.7_CVAE_mcts1,2'
+    # model_name: str = '12.8_CVAE_mcts2_scratch'
+    # model_name: str = '12.27_CVAE_sim_huge'
+    # model_name: str = '12.27_CVAE_sim_huge_x'
+    # model_name: str = '12.27_CVAE_mcts_3'
+    # model_name: str = '12.28_CVAE_huge_mcts2'
+    # model_name: str = '12.28_CVAE_huge_x_mcts2'
+
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
     test_eval_freq: int = 10 # per epochs
