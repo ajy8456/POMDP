@@ -141,6 +141,8 @@ class TransitionModel(TransitionModel):
             return self._epsilon
 
     def sample(self, state, action):
+        if action == "check":
+            action = (0,0)
         next_state = copy.deepcopy(state)
         next_state.position = tuple(self.func(state.position, action))
         return next_state
@@ -244,11 +246,15 @@ class RewardModel(RewardModel):
         self._epsilon=epsilon
 
     def _reward_func_state(self, state: State, action, next_state: State, goal_state: State, epsilon):
-        if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
-            reward = 100
+        if action == "check":
+            if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
+                reward = 100
+            else:
+                # reward = (-1) * np.abs(next_state.position[0] - self.light)
+                reward = -100
         else:
-            # reward = (-1) * np.abs(next_state.position[0] - self.light)
             reward = -1
+            
         return reward
 
         # # Euclidean distance
@@ -635,8 +641,8 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
-    num_particles = 1000
+    num_planning = 100
+    num_particles = 100
 
     if save_data:
         save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_3_train')
@@ -782,18 +788,18 @@ def main():
             total_num_sims_success += sims_count_success
             total_plan_time += time_taken
 
-            check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+            reward = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
             # |TODO| can move before update to avoid confusion state case and belief case?
             # By belief state
             # reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)
             # # By true state
             # reward = light_dark_problem.env.reward_model.sample(next_state, best_action, next_state)
 
-            # |NOTE| only take positive reward as achieving goal condition
-            if not check_goal: # if you want to use reward proportional to the number of particles which is satisfied the goal condition, use reward_model.sample().
-                reward = -1.
-            else:
-                reward = 100.
+            # # |NOTE| only take positive reward as achieving goal condition
+            # if not check_goal: # if you want to use reward proportional to the number of particles which is satisfied the goal condition, use reward_model.sample().
+            #     reward = -1.
+            # else:
+            #     reward = 100.
 
             total_reward = reward + discont_factor * total_reward
 
@@ -823,40 +829,57 @@ def main():
                 viz.log_belief(light_dark_problem.agent.cur_belief)
                 viz.log_belief_expectation(expectation_belief(light_dark_problem.agent.cur_belief))
 
-            if check_goal:
-                print("\n")
-                print("==== Success ====")
-                print("Total reward: %.5f" % total_reward)
-                log_total_reward.append(total_reward)
-                log_total_reward_success.append(total_reward)
-                # print("History:", planner.history)
-                print("Total Num sims: %d" % total_num_sims)
-                print(f"Num sims success: {total_num_sims_success} ({100 * total_num_sims_success/total_num_sims}%)")
-                print("Total Plan time: %.5f" % total_plan_time)
-                num_sucess += 1
-         
-                log_val_root_success_traj_avg.append(log_val_each_root_avg)
-                log_val_action_success_traj_avg.append(log_val_each_action_avg)
-                log_val_root_step.append(log_val_each_root)
-                log_val_action_step.append(log_val_each_action)
-                
-                # # save data
-                # if save_data:
-                #     with open(os.path.join(save_dir,'success_history.pickle'), 'ab') as f:
-                #         pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
-                #     with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
-                #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
-                
-                # # Saving success simulation history
-                # if save_sim_data:
-                #     if planner.history_data is None:
-                #         pass
-                #     else:
-                #         sim_data = planner.history_data
-                #         sim_data.append(goal_pos)
-                #         sim_data.append(total_reward)
-                #         with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
-                #             pickle.dump(sim_data, f)
+            # if check_goal:
+            if best_action == 'check':
+                if reward == 100:
+                    print("\n")
+                    print("==== Success ====")
+                    print("Total reward: %.5f" % total_reward)
+                    log_total_reward.append(total_reward)
+                    log_total_reward_success.append(total_reward)
+                    # print("History:", planner.history)
+                    print("Total Num sims: %d" % total_num_sims)
+                    print(f"Num sims success: {total_num_sims_success} ({100 * total_num_sims_success/total_num_sims}%)")
+                    print("Total Plan time: %.5f" % total_plan_time)
+                    num_sucess += 1
+            
+                    log_val_root_success_traj_avg.append(log_val_each_root_avg)
+                    log_val_action_success_traj_avg.append(log_val_each_action_avg)
+                    log_val_root_step.append(log_val_each_root)
+                    log_val_action_step.append(log_val_each_action)
+                    
+                    # # save data
+                    # if save_data:
+                    #     with open(os.path.join(save_dir,'success_history.pickle'), 'ab') as f:
+                    #         pickle.dump(planner.history[:-1], f, pickle.HIGHEST_PROTOCOL)
+                    #     with open(os.path.join(save_dir,'success_value.pickle'), 'ab') as f:
+                    #         pickle.dump(total_reward, f, pickle.HIGHEST_PROTOCOL)
+                    
+                    # # Saving success simulation history
+                    # if save_sim_data:
+                    #     if planner.history_data is None:
+                    #         pass
+                    #     else:
+                    #         sim_data = planner.history_data
+                    #         sim_data.append(goal_pos)
+                    #         sim_data.append(total_reward)
+                    #         with open(os.path.join(save_dir_sim, 'simulation_history_data.pickle'), 'ab') as f:
+                    #             pickle.dump(sim_data, f)
+                elif reward == -100:
+                    print("==== Fail ====")
+                    print("Total reward: %.5f" % total_reward)
+                    log_total_reward.append(total_reward)
+                    log_total_reward_fail.append(total_reward)
+                    # print("History:", planner.history)
+                    print("Total Num sims: %d" % total_num_sims)
+                    print(f"Num sims success: {total_num_sims_success} ({100 * total_num_sims_success/total_num_sims}%)")
+                    print("Total Plan time: %.5f" % total_plan_time)
+                    num_fail += 1
+
+                    log_val_root_fail_traj_avg.append(log_val_each_root_avg)
+                    log_val_action_fail_traj_avg.append(log_val_each_action_avg)
+                    log_val_root_step.append(log_val_each_root)
+                    log_val_action_step.append(log_val_each_action)
                         
                 if save_data:
                     traj_data.append(goal_pos)
@@ -906,7 +929,7 @@ def main():
                     with open(os.path.join(save_dir, f'{name_dataset}_{n}.pickle'), 'wb') as f:
                         pickle.dump(traj_data, f)
             
-        if plotting is not None:
+        if plotting is not None and reward == 100:
             viz.plot(path_colors={0: [(0,0,0), (0,255,0)],
                                     1: [(0,0,0), (255,0,0)]},
                         path_styles={0: "--",

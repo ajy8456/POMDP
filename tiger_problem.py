@@ -172,7 +172,7 @@ class PolicyModel(RandomRollout):
     # A stay action can be added to test that POMDP solver is
     # able to differentiate information gathering actions.
     ACTIONS = {Action(s) for s in {"open-left", "open-right",
-                                   "listen", "stay"}}
+                                   "listen"}}
 
     def sample(self, state, **kwargs):
         return self.get_all_actions().random()
@@ -223,7 +223,7 @@ def test_planner(tiger_problem, planner, nsteps=3):
         # In general, this observation should be sampled from agent's observation model.
         real_observation = Observation(tiger_problem.env.state.name)
         print(">> Observation: %s" % real_observation)
-        tiger_problem.agent.update_history(action, real_observation)
+        # tiger_problem.agent.update_history(action, real_observation)
 
         planner.update(tiger_problem.agent, action, real_observation)
         if isinstance(planner, POMCP):

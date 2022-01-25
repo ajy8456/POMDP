@@ -279,7 +279,6 @@ class POMCP(Planner):
                                                                                depth+nsteps)
         if depth == 1 and root is not None:
             self.cnt += 1
-            print("True!!!!!!!!", self.cnt)
             root.belief.add(state)  # belief update happens as simulation goes.
         root.num_visits += 1
         root[action].num_visits += 1

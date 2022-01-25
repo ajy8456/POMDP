@@ -1,7 +1,7 @@
 from POMDP_framework import *
 from POMCP import *
 # |TODO| How to use light_dark_problem.State
-from light_dark_problem import State
+from light_dark_problem import State, expectation_belief
 import os
 import copy
 import time
@@ -204,23 +204,25 @@ class POMCPOW(Planner):
                 _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
                     # print("Inference time:", inference_time)
             else:
-                # # testing for optimal solution
-                # if len(history) == 1:
-                #     if vnode[(-2.5, -2.5)] is None:
-                #         history_action_node = QNode(self._num_visits_init, self._value_init)
-                #         vnode[(-2.5, -2.5)] = history_action_node
-                #     # if vnode[(2.5, -1.25)] is None:
-                #     #     history_action_node = QNode(self._num_visits_init, self._value_init)
-                #     #     vnode[(2.5, -1.25)] = history_action_node
-                #     _action = (2.5, -1.25)
-                # elif len(history) == 2:
-                #     if history[1][0][0] == 2.5:
-                #         # _action = (-state.position[0], -state.position[1])
-                #         _action = (-5.0, -1.25)
-                #     else:
-                #         _action = self._NextAction(state)
-                # else:
-                _action = self._NextAction(state)
+                # testing for optimal solution
+                if len(history) == 1:
+                    if vnode[(-2.5, -2.5)] is None:
+                        history_action_node = QNode(self._num_visits_init, self._value_init)
+                        vnode[(-2.5, -2.5)] = history_action_node
+                    if vnode[(0.0, 0.0)] is None:
+                        history_action_node = QNode(self._num_visits_init, self._value_init)
+                        vnode[(0.0, 0.0)] = history_action_node
+                    _action = (2.5, -1.25)
+                elif len(history) == 2:
+                    if history[1][0][0] == 2.5:
+                        # _action = (-state.position[0], -state.position[1])
+                        # _action = (-5.0, -1.25)
+                        avg_belief = expectation_belief(self._agent.belief)
+                        _action = (-(avg_belief[0]+2.5), -(avg_belief[1]-1.25))
+                    else:
+                        _action = self._NextAction(state)
+                else:
+                    _action = self._NextAction(state)
 
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
@@ -232,11 +234,11 @@ class POMCPOW(Planner):
         # print("call _ucb()")
         # ################################################################
 
-        # # testing for optimal solution
-        # if len(history) == 1:
-        #     a_candidate = [(-2.5,-2.5), (2.5,-1.25)]
-        #     a_idx = np.random.randint(0,2)
-        #     return a_candidate[a_idx]
+        # testing for optimal solution
+        if len(history) == 1:
+            a_candidate = [(-2.5,-2.5), (2.5,-1.25), (0.0, 0.0)]
+            a_idx = np.random.randint(0,3)
+            return a_candidate[a_idx]
 
         return self._ucb(vnode)
 
