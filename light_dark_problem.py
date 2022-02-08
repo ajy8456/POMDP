@@ -611,8 +611,8 @@ def main():
     plotting = None
     save_log = False
     save_data = False
-    # save_sim_data = 'sim_success_10'
-    save_sim_data = False
+    save_sim_data = 'sim_success_10'
+    # save_sim_data = False
     # name_dataset = 'mcts_3_'
     name_dataset = None
     exp = False
@@ -635,16 +635,16 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 1
+    num_planning = 100
     num_particles = 1000
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_3_train')
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
             
     if save_sim_data:
-        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success')
+        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_2.7_exp_const_30_std0.5')
         if not os.path.exists(save_dir_sim):
             os.mkdir(save_dir_sim)
     else:
@@ -705,10 +705,20 @@ def main():
         #     init_belief.append(sample)
             # init_belief[sample] = 1 / (random_range**2 * num_particles)
         # For gaussian initalization
-        init_belief_std = 0.25
+        # init_belief_std = 1.0
+        init_belief_std = 0.5
         while len(init_belief) < num_particles:
+            # # uniform distribution
+            # radius = init_belief_std * np.random.rand(1)
+            # theta = 2 * np.pi * np.random.rand(1)
+            # noise = np.asarray([radius * np.cos(theta), radius * np.sin(theta)]).reshape(2)
+            # sample = State(tuple(init_state.position + noise))
+
+            # normal distribution
             sample = State(tuple(np.asarray(init_state.position) + init_belief_std * (np.random.randn(2))))
+
             init_belief.append(sample)
+
         init_belief = Particles(init_belief)
                
         # creates POMDP model
@@ -717,8 +727,11 @@ def main():
         light_dark_problem.agent.set_belief(init_belief)
 
         # set planner
+        # planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
+        #                 discount_factor=discont_factor, save_dir_sim=save_dir_sim, exploration_const=math.sqrt(2),
+        #                 num_visits_init=0, value_init=0)
         planner = POMCPOW(pomdp=light_dark_problem, max_depth=planning_horizon, planning_time=-1., num_sims=num_particles,
-                        discount_factor=discont_factor, save_dir_sim=save_dir_sim, exploration_const=math.sqrt(2),
+                        discount_factor=discont_factor, save_dir_sim=save_dir_sim, exploration_const=30,
                         num_visits_init=0, value_init=0)
 
         # Visualization setting

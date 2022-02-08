@@ -162,9 +162,10 @@ class POMCPOW(Planner):
         data = (agent.history, sampled_action, p_action, num_visits_action, val_action, val_root)
 
         # next_action: sampling with probabilty of p_action or best_action
-        next_action = best_action
-        # next_action = sampled_action[np.random.choice(np.arange(len(p_action)), p=p_action)]
+        # next_action = best_action
+        next_action = sampled_action[np.random.choice(np.arange(len(p_action)), p=p_action)]
 
+        # print("b0:", self._agent.tree.belief.particles)
         return next_action, time_taken, sims_count, num_sims_success, val_root, self._agent.tree[best_action].value, data
 
     # |NOTE| uniformly random
@@ -204,25 +205,25 @@ class POMCPOW(Planner):
                 _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
                     # print("Inference time:", inference_time)
             else:
-                # testing for optimal solution
-                if len(history) == 1:
-                    if vnode[(-2.5, -2.5)] is None:
-                        history_action_node = QNode(self._num_visits_init, self._value_init)
-                        vnode[(-2.5, -2.5)] = history_action_node
-                    if vnode[(0.0, 0.0)] is None:
-                        history_action_node = QNode(self._num_visits_init, self._value_init)
-                        vnode[(0.0, 0.0)] = history_action_node
-                    _action = (2.5, -1.25)
-                elif len(history) == 2:
-                    if history[1][0][0] == 2.5:
-                        # _action = (-state.position[0], -state.position[1])
-                        # _action = (-5.0, -1.25)
-                        avg_belief = expectation_belief(self._agent.belief)
-                        _action = (-(avg_belief[0]+2.5), -(avg_belief[1]-1.25))
-                    else:
-                        _action = self._NextAction(state)
-                else:
-                    _action = self._NextAction(state)
+                # # testing for optimal solution
+                # if len(history) == 1:
+                #     if vnode[(-2.5, -2.5)] is None:
+                #         history_action_node = QNode(self._num_visits_init, self._value_init)
+                #         vnode[(-2.5, -2.5)] = history_action_node
+                #     if vnode[(0.0, 0.0)] is None:
+                #         history_action_node = QNode(self._num_visits_init, self._value_init)
+                #         vnode[(0.0, 0.0)] = history_action_node
+                #     _action = (2.5, -1.25)
+                # elif len(history) == 2:
+                #     if history[1][0][0] == 2.5:
+                #         # _action = (-state.position[0], -state.position[1])
+                #         # _action = (-5.0, -1.25)
+                #         avg_belief = expectation_belief(self._agent.belief)
+                #         _action = (-(avg_belief[0]+2.5), -(avg_belief[1]-1.25))
+                #     else:
+                #         _action = self._NextAction(state)
+                # else:
+                _action = self._NextAction(state)
 
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
@@ -234,11 +235,11 @@ class POMCPOW(Planner):
         # print("call _ucb()")
         # ################################################################
 
-        # testing for optimal solution
-        if len(history) == 1:
-            a_candidate = [(-2.5,-2.5), (2.5,-1.25), (0.0, 0.0)]
-            a_idx = np.random.randint(0,3)
-            return a_candidate[a_idx]
+        # # testing for optimal solution
+        # if len(history) == 1:
+        #     a_candidate = [(-2.5,-2.5), (2.5,-1.25), (0.0, 0.0)]
+        #     a_idx = np.random.randint(0,3)
+        #     return a_candidate[a_idx]
 
         return self._ucb(vnode)
 
