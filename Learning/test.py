@@ -10,12 +10,15 @@ import matplotlib.pyplot as plt
 
 path: str = 'Learning/dataset'
 dataset_path = os.path.join(os.getcwd(), path)
-filename: str = 'sim_success' # folder name
+filename: str = 'sim_success_2.7_exp_const_30_std0.5' # folder name
 dataset = glob.glob(f'{dataset_path}/{filename}/*.pickle')
 for d in dataset:
     if os.path.getsize(d) == 0:
         print(d)
-
+# d = dataset[14536]
+# with open(d, 'rb') as f:
+#     data = pickle.load(f)
+# print(data)
 
 # path: str = 'Learning/dataset'
 # dataset_path = os.path.join(os.getcwd(), path)
@@ -171,17 +174,17 @@ for d in dataset:
 # success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4, 28.0],
 #                               [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 78.0, 74.5],
 #                               [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2, 39.1]])
-num_sim = np.array([1, 10, 20, 50, 100, 200, 500])
-success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4],
-                              [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 73.0],
-                              [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2]])
-# plt.plot(num_sim, success_rate_exec[0], label='Guided(before)')
-plt.plot(num_sim, success_rate_exec[1], label='Unguided')
-plt.plot(num_sim, success_rate_exec[2], label='Guided')
+# num_sim = np.array([1, 10, 20, 50, 100, 200, 500])
+# success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4],
+#                               [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 73.0],
+#                               [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2]])
+# # plt.plot(num_sim, success_rate_exec[0], label='Guided(before)')
+# plt.plot(num_sim, success_rate_exec[1], label='Unguided')
+# plt.plot(num_sim, success_rate_exec[2], label='Guided')
 
-plt.xscale('log')
-plt.legend()
-plt.show()
+# plt.xscale('log')
+# plt.legend()
+# plt.show()
 
 
 # path = os.path.join(os.getcwd(), 'Learning/dataset/mcts_1')

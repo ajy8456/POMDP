@@ -25,6 +25,7 @@ class LightDarkDataset(Dataset):
         traj = self.dataset[index]
         with open(traj, 'rb') as f:
             try:
+                # print(self.dataset[index])
                 traj = pickle.load(f)
             except pickle.UnpicklingError:
                 pass
