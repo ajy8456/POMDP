@@ -1,5 +1,6 @@
 import os
 import time
+import random
 import numpy as np
 import torch as th
 from dataclasses import dataclass, replace
@@ -92,7 +93,7 @@ class Settings(Serializable):
     # model_name: str = '11.23_CVAE_randomized'
     # model_name: str = '11.28_CVAE'
     # model_name: str = '11.29_CVAE_mcts1,2_filtered_prev'
-    model_name: str = '11.29_CVAE_mcts1_filtered'
+    # model_name: str = '11.29_CVAE_mcts1_filtered'
     # model_name: str = '12.7_CVAE_mcts2'
     # model_name: str = '12.7_CVAE_mcts2_only'
     # model_name: str = '12.7_CVAE_mcts1,2'
@@ -102,6 +103,12 @@ class Settings(Serializable):
     # model_name: str = '12.27_CVAE_mcts_3'
     # model_name: str = '12.28_CVAE_huge_mcts2'
     # model_name: str = '12.28_CVAE_huge_x_mcts2'
+    # model_name: str = '2.8_CVAE_sim_dim16'
+    # model_name: str = '2.19_CVAE_mcts_1_dim16'
+    # model_name: str = '2.23_CVAE_sim_mcts_1_dim16_50K'
+    # model_name: str = '2.27_CVAE_sim_mcts_1_dim16'
+    # model_name: str = '3.5_CVAE_sim_mcts_2_dim16'
+    model_name: str = '3.11_CVAE_mcts_1_dim16'
 
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
@@ -236,6 +243,13 @@ class NNRegressionPolicyModel(PolicyModel):
             'mask': mask}
 
         return data
+
+    def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
+        pos = state.position
+        _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
+        _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
+        _action = (_action_x,_action_y)
+        return _action
 
 
 if __name__ == '__main__':

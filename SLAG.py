@@ -1,3 +1,8 @@
+"""
+POMDP modeling about SLAG(simultaneously Localizing and Grasping) problem
+"""
+
+
 import os
 from POMDP_framework import *
 from POMCP import *
@@ -18,24 +23,26 @@ from policy import Settings, NNRegressionPolicyModel
 
 
 class State(State):
-    """The state of the problem is just the robot position"""
-    def __init__(self, position):
+    """
+    The state of the problem is the difference pose of two objects with end-effector in 2D plain (x_1,y_1,theta_1,x_2,y_2,theta_2,w_1,w_2).
+    """
+    def __init__(self, state):
         """
-        Initializes a state in light dark domain.
+        Initializes a state.
 
         Args:
-            position (tuple): position of the robot.
+            state (tuple): pose of two objects.
         """
-        if len(position) != 2:
-            raise ValueError("State position must be a vector of length 2")
-        self.position = position
+        if len(state) != 8:
+            raise ValueError("State position must be a vector of length 8")
+        self.state = state
 
     def __hash__(self):
-        return hash(tuple(self.position))
+        return hash(tuple(self.state))
     
     def __eq__(self, other):
         if isinstance(other, State):
-            return self.position == other.position
+            return self.state == other.state
         else:
             return False
         
@@ -47,24 +54,26 @@ class State(State):
 
 
 class Action(Action):
-    """The action is a vector of velocities(2-dimension)"""
-    def __init__(self, control):
+    """
+    The action is a vector of velocities in 2D(v_x,v_y,v_theta).
+    """
+    def __init__(self, action):
         """
-        Initializes a state in light dark domain.
+        Initializes a action.
 
         Args:
-            control (tuple): velocity
+            action (tuple): velocity
         """
-        if len(control) != 2:
-            raise ValueError("Action control must be a vector of length 2")        
-        self.control = control
+        if len(action) != 3:
+            raise ValueError("Action control must be a vector of length 3")        
+        self.action = action
 
     def __hash__(self):
-        return hash(self.control)
+        return hash(self.action)
     
     def __eq__(self, other):
         if isinstance(other, Action):
-            return self.control == other.control
+            return self.action == other.action
         else:
             return False
         
@@ -72,47 +81,28 @@ class Action(Action):
         return self.__repr__()
     
     def __repr__(self):
-        return "Action(%s)" % (str(self.control))
+        return "Action(%s)" % (str(self.action))
 
 
 class Observation(Observation):
-    """Defines the Observation for the continuous light-dark domain;
-
-    Observation space: 
-
-        :math:`\Omega\subseteq\mathbb{R}^2` the observation of the robot is
-            an estimate of the robot position :math:`g(x_t)\in\Omega`.
-
     """
-    # # the number of decimals to round up an observation when it is discrete.
-    # PRECISION=2
+    Defines the Observation for the continuous SLAG domain;
+    Observation space: 
+        The distance between end-effector and the object in front, adding Guassian noise.
+    """
     
-    def __init__(self, position, discrete=False):
+    def __init__(self, observation):
         """
-        Initializes a observation in light dark domain.
+        Initializes a observation.
 
         Args:
-            position (tuple): position of the robot.
+            observation (float): distance
         """
-        self._discrete = discrete
-        if len(position) != 2:
-            raise ValueError("Observation position must be a vector of length 2")
-        if self._discrete:
-            self.position = position
-        else:
-            # self.position = (round(position[0], Observation.PRECISION),
-            #                  round(position[1], Observation.PRECISION))
-            self.position = (position[0], position[1])
+        self.observation = observation
 
-    def discretize(self):
-        return Observation(self.position, discrete=True)
-
-    def __hash__(self):
-        return hash(self.position)
-    
     def __eq__(self, other):
         if isinstance(other, Observation):
-            return self.position == other.position
+            return self.observation == other.observation
         else:
             return False
         
@@ -120,7 +110,7 @@ class Observation(Observation):
         return self.__repr__()
     
     def __repr__(self):
-        return "Observation(%s)" % (str(self.position))
+        return "Observation(%s)" % (str(self.observation))
 
 
 class TransitionModel(TransitionModel):
@@ -134,194 +124,192 @@ class TransitionModel(TransitionModel):
         """
         Deterministic.
         """
-        expected_position = tuple(self.func(state.position, action))
-        if next_state.position == expected_position:
+        expected_pose = tuple(self.func(state.state, action))
+        if next_state.pose == expected_pose:
             return 1.0 - self._epsilon
         else:
             return self._epsilon
 
     def sample(self, state, action):
         next_state = copy.deepcopy(state)
-        next_state.position = tuple(self.func(state.position, action))
+        next_state.state = tuple(self.func(state.state, action))
         return next_state
 
     def argmax(self, state, action):
         """Returns the most likely next state"""
         return self.sample(state, action)
 
+    #|FIXME| Is the corner for state invariant? Can the orientation be negative?
     def func(self, state_pos, action):
-        """Returns the function of the underlying system dynamics.
-        The function is: (xt, ut) -> xt+1 where xt, ut, xt+1 are
-        all numpy arrays."""
-        return np.array([state_pos[0] + action[0],
-                        state_pos[1] + action[1]])
-    
-    def func_noise(self, var_sysd=1e-9):
-        """Returns a function that returns a state-dependent Gaussian noise."""
-        def fn(mt):
-            gaussian_noise = Gaussian([0,0],
-                                      [[var_sysd, 0],
-                                      [0, var_sysd]])
-            return gaussian_noise
-        return fn
+        """
+        Returns the function of the underlying system dynamics.
+        The function is: (xt, ut) -> xt+1 where xt, ut, xt+1 are all numpy arrays.
+        """
+        return np.array([state_pos[0] - action[0],
+                         state_pos[1] - action[1],
+                         state_pos[2] - action[2],
+                         state_pos[3] - action[0],
+                         state_pos[4] - action[1],
+                         state_pos[5] - action[2],
+                         state_pos[6],
+                         state_pos[7]])
 
 
 class ObservationModel(ObservationModel):
 
-    def __init__(self, light, const):
-        """
-        `light` and `const` are parameters in
-        :math:`w(x) = \frac{1}{2}(\text{light}-s_x)^2 + \text{const}`
+    # def __init__(self, light, const):
+    #     """
+    #     `light` and `const` are parameters in
+    #     :math:`w(x) = \frac{1}{2}(\text{light}-s_x)^2 + \text{const}`
 
-        They should both be floats. The quantity :math:`w(x)` will
-        be used as the variance of the covariance matrix in the gaussian
-        distribution (this is how I understood the paper).
-        """
-        self._light = light
-        self._const = const
+    #     They should both be floats. The quantity :math:`w(x)` will
+    #     be used as the variance of the covariance matrix in the gaussian
+    #     distribution (this is how I understood the paper).
+    #     """
+    #     self._light = light
+    #     self._const = const
 
-    def _compute_variance(self, pos):
-        return 0.5 * (self._light - pos[0])**2 + self._const
+    # def _compute_variance(self, pos):
+    #     return 0.5 * (self._light - pos[0])**2 + self._const
 
-    def noise_covariance(self, pos):
-        variance = self._compute_variance(pos)
-        return np.array([[variance, 0],
-                         [0, variance]])
+    # def noise_covariance(self, pos):
+    #     variance = self._compute_variance(pos)
+    #     return np.array([[variance, 0],
+    #                      [0, variance]])
 
-    # |FIXME| observe according to true/belief state??
-    def probability(self, observation, next_true_state, next_belief, action):
-        """
-        The observation is :math:`g(x_t) = x_t+\omega`. So
-        the probability of this observation is the probability
-        of :math:`\omega` which follows the Gaussian distribution.
-        """
-        # if self._discrete:
-        #     observation = observation.discretize()
-        variance = self._compute_variance(next_true_state.position)
-        gaussian_noise = Gaussian([0,0],
-                                  [[variance, 0],
-                                   [0, variance]])
-        omega = (observation.position[0] - next_belief.position[0],
-                 observation.position[1] - next_belief.position[1])
-        return gaussian_noise[omega]
+    # # |FIXME| observe according to true/belief state??
+    # def probability(self, observation, next_true_state, next_belief, action):
+    #     """
+    #     The observation is :math:`g(x_t) = x_t+\omega`. So
+    #     the probability of this observation is the probability
+    #     of :math:`\omega` which follows the Gaussian distribution.
+    #     """
+    #     # if self._discrete:
+    #     #     observation = observation.discretize()
+    #     variance = self._compute_variance(next_true_state.position)
+    #     gaussian_noise = Gaussian([0,0],
+    #                               [[variance, 0],
+    #                                [0, variance]])
+    #     omega = (observation.position[0] - next_belief.position[0],
+    #              observation.position[1] - next_belief.position[1])
+    #     return gaussian_noise[omega]
 
-    def sample(self, next_state, action, argmax=False):
-        """sample an observation."""
-        # Sample a position shift according to the gaussian noise.
-        obs_pos = self.func(next_state.position, False)
-        return Observation(tuple(obs_pos))
+    # def sample(self, next_state, action, argmax=False):
+    #     """sample an observation."""
+    #     # Sample a position shift according to the gaussian noise.
+    #     obs_pos = self.func(next_state.position, False)
+    #     return Observation(tuple(obs_pos))
         
-    def argmax(self, next_state, action):
-        return self.sample(next_state, action, argmax=True)
+    # def argmax(self, next_state, action):
+    #     return self.sample(next_state, action, argmax=True)
 
-    def func(self, next_state_pos, mpe=False):
-        variance = self._compute_variance(next_state_pos)
-        gaussian_noise = Gaussian([0,0],
-                                  [[variance, 0],
-                                   [0, variance]])
-        if mpe:
-            omega = gaussian_noise.mpe()
-        else:
-            omega = gaussian_noise.random()
-        return np.array([next_state_pos[0] + omega[0],
-                         next_state_pos[1] + omega[1]])
+    # def func(self, next_state_pos, mpe=False):
+    #     variance = self._compute_variance(next_state_pos)
+    #     gaussian_noise = Gaussian([0,0],
+    #                               [[variance, 0],
+    #                                [0, variance]])
+    #     if mpe:
+    #         omega = gaussian_noise.mpe()
+    #     else:
+    #         omega = gaussian_noise.random()
+    #     return np.array([next_state_pos[0] + omega[0],
+    #                      next_state_pos[1] + omega[1]])
 
-    def func_noise(self):
-        """Returns a function that returns a state-dependent Gaussian noise."""
-        def fn(mt):
-            variance = self._compute_variance(mt)
-            gaussian_noise = Gaussian([0,0],
-                                      [[variance, 0],
-                                       [0, variance]])
-            return gaussian_noise
-        return fn
+    # def func_noise(self):
+    #     """Returns a function that returns a state-dependent Gaussian noise."""
+    #     def fn(mt):
+    #         variance = self._compute_variance(mt)
+    #         gaussian_noise = Gaussian([0,0],
+    #                                   [[variance, 0],
+    #                                    [0, variance]])
+    #         return gaussian_noise
+    #     return fn
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon):
-        self.light = light
-        self._goal_state = goal_state
-        self._epsilon=epsilon
+    # def __init__(self, light, goal_state, epsilon):
+    #     self.light = light
+    #     self._goal_state = goal_state
+    #     self._epsilon=epsilon
 
-    def _reward_func_state(self, state: State, action, next_state: State, goal_state: State, epsilon):
-        if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
-            reward = 100
-        else:
-            # reward = (-1) * np.abs(next_state.position[0] - self.light)
-            reward = -1
-        return reward
+    # def _reward_func_state(self, state: State, action, next_state: State, goal_state: State, epsilon):
+    #     if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
+    #         reward = 100
+    #     else:
+    #         # reward = (-1) * np.abs(next_state.position[0] - self.light)
+    #         reward = -1
+    #     return reward
 
-        # # Euclidean distance
-        # reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
-        # return reward
+    #     # # Euclidean distance
+    #     # reward = (-1)*np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2)
+    #     # return reward
 
-    def _reward_func_particle(self, state: Particles, action: Action, next_state: Particles, goal_state: State, epsilon: float):
-        # for belief state - be used to real action
-        reward_expectatation = 0
-        for state_in in next_state.particles:
-            reward_expectatation += self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
-        return reward_expectatation / len(next_state)
+    # def _reward_func_particle(self, state: Particles, action: Action, next_state: Particles, goal_state: State, epsilon: float):
+    #     # for belief state - be used to real action
+    #     reward_expectatation = 0
+    #     for state_in in next_state.particles:
+    #         reward_expectatation += self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
+    #     return reward_expectatation / len(next_state)
 
-    def _reward_func_hist(self, state: Histogram, action: Action, next_state: Histogram, goal_state: State, epsilon: float):
-        # for belief state - be used to real action
-        normalized_hist = next_state.get_normalized()
-        reward_expectatation = 0
-        for state_in in normalized_hist:
-            reward_expectatation += normalized_hist[state_in] * self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
-        return reward_expectatation
+    # def _reward_func_hist(self, state: Histogram, action: Action, next_state: Histogram, goal_state: State, epsilon: float):
+    #     # for belief state - be used to real action
+    #     normalized_hist = next_state.get_normalized()
+    #     reward_expectatation = 0
+    #     for state_in in normalized_hist:
+    #         reward_expectatation += normalized_hist[state_in] * self._reward_func_state(state_in, action, state_in, self._goal_state, self._epsilon)
+    #     return reward_expectatation
 
-    def sample(self, state, action, next_state):
-        # |TODO| make exception
-        # deterministic      
-        if str(type(next_state)) == "<class '__main__.State'>":
-            return self._reward_func_state(state, action, next_state, self._goal_state, self._epsilon)
-        # |TODO| currently, get reward after update, can make same as state case(before update)?
-        elif str(type(next_state)) == "<class 'POMDP_framework.Particles'>":
-            return self._reward_func_particle(state, action, next_state, self._goal_state, self._epsilon)
-        elif str(type(next_state)) == "<class 'POMDP_framework.Histogram'>":
-            return self._reward_func_hist(state, action, next_state, self._goal_state, self._epsilon)
+    # def sample(self, state, action, next_state):
+    #     # |TODO| make exception
+    #     # deterministic      
+    #     if str(type(next_state)) == "<class '__main__.State'>":
+    #         return self._reward_func_state(state, action, next_state, self._goal_state, self._epsilon)
+    #     # |TODO| currently, get reward after update, can make same as state case(before update)?
+    #     elif str(type(next_state)) == "<class 'POMDP_framework.Particles'>":
+    #         return self._reward_func_particle(state, action, next_state, self._goal_state, self._epsilon)
+    #     elif str(type(next_state)) == "<class 'POMDP_framework.Histogram'>":
+    #         return self._reward_func_hist(state, action, next_state, self._goal_state, self._epsilon)
         
-    # For State
-    def is_goal_state(self, state: State):
-        if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon**2:
-            return True
-        return False
+    # # For State
+    # def is_goal_state(self, state: State):
+    #     if np.sum((np.asarray(self._goal_state.position) - np.asarray(state.position))**2) < self._epsilon**2:
+    #         return True
+    #     return False
 
-    # For Histogram
-    def is_goal_hist(self, state: Histogram, thres=0.7):
-        # test goal condition: #particle(prob) in goal_state >= thres -> True
-        prob_in_goal = 0
-        normalized_hist = state.get_normalized()
-        for particle in normalized_hist:
-            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
-                prob_in_goal += normalized_hist[particle]
-        print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
-        return prob_in_goal >= thres
+    # # For Histogram
+    # def is_goal_hist(self, state: Histogram, thres=0.7):
+    #     # test goal condition: #particle(prob) in goal_state >= thres -> True
+    #     prob_in_goal = 0
+    #     normalized_hist = state.get_normalized()
+    #     for particle in normalized_hist:
+    #         if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
+    #             prob_in_goal += normalized_hist[particle]
+    #     print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
+    #     return prob_in_goal >= thres
     
-    # For Particles
-    def is_goal_particles(self, state: Particles, thres=0.7):
-        # test goal condition: #particle(prob) in goal_state >= thres -> True
-        num_particles = len(state)
-        prob_in_goal = 0
-        for particle in state.particles:
-            if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
-                prob_in_goal += 1
-        prob_in_goal /= num_particles
-        print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
-        return prob_in_goal >= thres
+    # # For Particles
+    # def is_goal_particles(self, state: Particles, thres=0.7):
+    #     # test goal condition: #particle(prob) in goal_state >= thres -> True
+    #     num_particles = len(state)
+    #     prob_in_goal = 0
+    #     for particle in state.particles:
+    #         if np.sum((np.asarray(self._goal_state.position) - np.asarray(particle.position))**2) < self._epsilon**2:
+    #             prob_in_goal += 1
+    #     prob_in_goal /= num_particles
+    #     print(r"% of particles in goal: " + str(prob_in_goal*100) + "%")
+    #     return prob_in_goal >= thres
 
 
 class PolicyModel(RandomRollout):
-    def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
-        pos = state.position
-        _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
-        _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
-        _action = (_action_x,_action_y)
-        return _action
+    # def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
+    #     pos = state.position
+    #     _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
+    #     _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
+    #     _action = (_action_x,_action_y)
+    #     return _action
 
 
 class LightDarkEnvironment(Environment):
-    
     def __init__(self,
                  init_state,
                  light,
@@ -412,214 +400,17 @@ def expectation_belief(belief: Particles):
     return expectation
 
 
-class LightDarkViz:
-    """This class deals with visualizing a light dark domain"""
-
-    def __init__(self, problem: LightDarkProblem, x_range, y_range, res):
-        """
-        Args:
-            env (LightDarkEnvironment): Environment for light dark domain.
-            x_range (tuple): a tuple of floats (x_min, x_max).
-            y_range (tuple): a tuple of floats (y_min, y_max).
-            res (float): specifies the size of each rectangular strip to draw;
-                As in the paper, the light is at a location on the x axis.
-        """
-        self._env = problem.env
-        self._res = res
-        self._x_range = x_range
-        self._y_range = y_range
-        fig = plt.gcf()
-        self._ax = fig.add_subplot(1,1,1)
-        self._goal_pos = problem.goal_state.position
-        self._init_pos = problem.env.init_state.position
-        # self._m_0 = None  # initial belief pose
-        self._init_belief = []
-        for p in problem.agent._init_belief.particles:
-            self._init_belief.append(p.position)
-        self._init_belief = np.asarray(self._init_belief).T
-
-        # For tracking the path; list of robot position tuples
-        self._log_paths = {}
-        self._log_state = []
-        self._log_belief = []
-        self._log_belief_expectation = []
-
-    def log_position(self, position, path=0):
-        if path not in self._log_paths:
-            self._log_paths[path] = []
-        self._log_paths[path].append(position)
-    
-    def log_state(self, state):
-        log = state.position
-        log = np.asarray(log).T
-        self._log_state.append(log)
-
-    def log_belief_expectation(self, belief_expectation):
-        log = np.asarray(belief_expectation).T
-        self._log_belief_expectation.append(log)
-
-    def log_belief(self, belief):
-        log = []
-        for p in belief.particles:
-            log.append(p.position)
-        log = np.asarray(log).T
-        self._log_belief.append(log)
-
-    def set_goal(self, goal_pos):
-        self._goal_pos = goal_pos
-
-    def set_init_state(self, init_pos):
-        self._init_pos = init_pos
-
-    # def set_initial_belief_pos(self, m_0):
-    #     self._m_0 = m_0
-
-    # |FIXME| change Particles to array
-    def set_init_belief(self, init_belief):
-        self._init_belief = init_belief
-
-    def plot(self,
-             path_colors={0: [(0,0,0), (0,0,0)]},
-             path_styles={0: "-"},
-             path_widths={0: 1}):
-        self._plot_gradient()
-        self._plot_path(path_colors, path_styles, path_widths)
-        # self._plot_robot()
-        self._plot_goal()
-        self._plot_init_state()
-        # self._plot_initial_belief_pos()
-        self._plot_initial_belief()
-        # self._plot_state()
-        self._plot_log_belief()
-        self._plot_log_belief_expectation()
-
-    def _plot_robot(self):
-        cur_pos = self._env.state.position
-        util.plot_circle(self._ax, cur_pos,
-                         0.25, # tentative
-                         color="black", fill=False,
-                         linewidth=1, edgecolor="black",
-                         zorder=3)
-
-    # def _plot_initial_belief_pos(self):
-    #     if self._m_0 is not None:
-    #         util.plot_circle(self._ax, self._m_0,
-    #                          0.25, # tentative
-    #                          color="black", fill=False,
-    #                          linewidth=1, edgecolor="black",
-    #                          zorder=3)
-
-    def _plot_goal(self):
-        if self._goal_pos is not None:
-            util.plot_circle(self._ax,
-                             self._goal_pos,
-                             0.25,  # tentative
-                             linewidth=3, edgecolor="orange",
-                             zorder=3)
-    
-    def _plot_init_state(self):
-        plt.scatter(self._init_pos[0], self._init_pos[1], c = 'k')
-    
-    def _plot_state(self):
-        s = np.asarray(self._log_state).T
-        plt.scatter(s[0], s[1], c='k')
-        plt.plot(s[0], s[1], c='k')
-
-    def _plot_initial_belief(self):
-        if self._init_belief is not None:
-            plt.scatter(self._init_belief[0], self._init_belief[1], s=0.1 ,c='g')
-    
-    def _plot_log_belief(self):
-        for b in self._log_belief:
-            plt.scatter(b[0], b[1], s=0.1 ,c='g')
-
-    def _plot_log_belief_expectation(self):
-        p = np.asarray(self._log_belief_expectation).T
-        plt.scatter(p[0], p[1], c='r')
-        plt.plot(p[0], p[1], c='r')
-
-        # for p in self._log_belief_expectation:
-        #     plt.scatter(p[0], p[1], c='r')
-        #     plt.plot(p[0], p[1], c='r')
-    
-    # def _animate(self, frame):
-    #     plt.scatter(frame[0], frame[1], c='r')
-    #     plt.plot(frame[0], frame[1], c='r')
-    #     return plt
-
-    def _plot_path(self, colors, styles, linewidths):
-        """Plot robot path"""
-        # Plot line segments
-        for path in self._log_paths:
-            if path not in colors:
-                path_color = [(0,0,0)] * len(self._log_paths[path])
-            else:
-                if len(colors[path]) == 2:
-                    c1, c2 = colors[path]
-                    path_color = util.linear_color_gradient(c1, c2,
-                                                            len(self._log_paths[path]),
-                                                            normalize=True)
-                else:
-                    path_color = [colors[path]] * len(self._log_paths[path])
-
-            if path not in styles:
-                path_style = "--"
-            else:
-                path_style = styles[path]
-
-            if path not in linewidths:
-                path_width = 1
-            else:
-                path_width = linewidths[path]
-
-            for i in range(1, len(self._log_paths[path])):
-                p1 = self._log_paths[path][i-1]
-                p2 = self._log_paths[path][i]
-                try:
-                    util.plot_line(self._ax, p1, p2, color=path_color[i],
-                                   linestyle=path_style, zorder=2, linewidth=path_width)
-                except Exception:
-                    import pdb; pdb.set_trace()
-
-    def _plot_gradient(self):
-        """display the light dark domain."""
-        xmin, xmax = self._x_range
-        ymin, ymax = self._y_range
-        # Note that higher brightness has lower brightness value
-        hi_brightness = self._env.const
-        lo_brightness = max(0.5 * (self._env.light - xmin)**2 + self._env.const,
-                            0.5 * (self._env.light - xmax)**2 + self._env.const)
-        # Plot a bunch of rectangular strips along the x axis
-        # Check out: https://stackoverflow.com/questions/10550477
-        x = xmin
-        verts = []
-        colors = []
-        while x < xmax:
-            x_next = x + self._res
-            verts.append([(x, ymin), (x_next, ymin), (x_next, ymax), (x, ymax)])
-            # compute brightness based on equation in the paper
-            brightness = 0.5 * (self._env.light - x)**2 + self._env.const
-            # map brightness to a grayscale color
-            grayscale = int(round(util.remap(brightness, hi_brightness, lo_brightness, 255, 0)))
-            grayscale_hex = util.rgb_to_hex((grayscale, grayscale, grayscale))
-            colors.append(grayscale_hex)
-            x = x_next
-        util.plot_polygons(verts, colors, ax=self._ax)
-        self._ax.set_xlim(xmin, xmax)
-        self._ax.set_ylim(ymin, ymax)
-
-
 def main():
     plotting = None
     save_log = False
-    save_data = True
-    # save_sim_data = 'sim_success_mcts2_5'
+    save_data = False
+    # save_sim_data = 'sim_success_10'
     save_sim_data = False
-    name_dataset = 'mcts_1_20'
-    # name_dataset = None
+    # name_dataset = 'mcts_3_'
+    name_dataset = None
     exp = False
 
-    guide = True
+    guide = False
     rollout_guide = False
 
     # Environment Setting
@@ -637,16 +428,16 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 10000
+    num_planning = 1
     num_particles = 100
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_2_exp_const_30_std0.5')
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
             
     if save_sim_data:
-        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_mcts2_exp_const_30_std0.5')
+        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_2.7_exp_const_30_std0.5')
         if not os.path.exists(save_dir_sim):
             os.mkdir(save_dir_sim)
     else:
@@ -707,7 +498,7 @@ def main():
         #     init_belief.append(sample)
             # init_belief[sample] = 1 / (random_range**2 * num_particles)
         # For gaussian initalization
-        # init_belief_std = 0.1
+        # init_belief_std = 1.0
         init_belief_std = 0.5
         while len(init_belief) < num_particles:
             # # uniform distribution

@@ -8,13 +8,13 @@ import torch as th
 import matplotlib.pyplot as plt
 
 
-path: str = 'Learning/dataset'
-dataset_path = os.path.join(os.getcwd(), path)
-filename: str = 'sim_success_2.7_exp_const_30_std0.5' # folder name
-dataset = glob.glob(f'{dataset_path}/{filename}/*.pickle')
-for d in dataset:
-    if os.path.getsize(d) == 0:
-        print(d)
+# path: str = 'Learning/dataset'
+# dataset_path = os.path.join(os.getcwd(), path)
+# filename: str = 'sim_success_mcts1_exp_const_30_std0.5' # folder name
+# dataset = glob.glob(f'{dataset_path}/{filename}/*.pickle')
+# for d in dataset:
+#     if os.path.getsize(d) == 0:
+#         print(d)
 # d = dataset[14536]
 # with open(d, 'rb') as f:
 #     data = pickle.load(f)
@@ -170,21 +170,27 @@ for d in dataset:
 # plt.show()
 
 
-# num_sim = np.array([1, 10, 20, 50, 100, 200, 500, 1000])
-# success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4, 28.0],
-#                               [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 78.0, 74.5],
-#                               [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2, 39.1]])
-# num_sim = np.array([1, 10, 20, 50, 100, 200, 500])
-# success_rate_exec = np.array([[47.9, 84.1, 83.0, 81.6, 73.3, 58.2, 39.4],
-#                               [10.6, 48.2, 54.9, 61.8, 67.6, 72.1, 73.0],
-#                               [48.1, 82.1, 85.1, 82.4, 74.6, 67.0, 51.2]])
-# # plt.plot(num_sim, success_rate_exec[0], label='Guided(before)')
-# plt.plot(num_sim, success_rate_exec[1], label='Unguided')
-# plt.plot(num_sim, success_rate_exec[2], label='Guided')
+num_sim = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500])
+# success_rate_exec = np.array([[46.2, 52.8, 57.1, 61.7, 62.0, 63.5, 63.8, 64.6, 65.5, 63.1, 66.5],
+#                               [74.5, 76.2, 76.1, 75.6, 73.1, 71.8, 70.9, 68.3, 69.8, 70.7, 54.7],
+#                               [64.2, 70.8, 71.7, 73.7, 73.4, 72.5, 71.6, 70.8, 71.2, 70.2, 61.0]])
+# num_sim = np.array([1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 500, 1000])
+success_rate_exec1 = np.array([[10.6, 28.2, 34.9, 46.0, 61.3, 61.8, 67.3, 65.5, 65.3, 66.1, 67.6, 72.1, 78.0, 74.5],
+                               [24, 31, 39, 47, 50, 55, 61, 66, 70, 73.3, 88, 91, 94, 95]])
+success_rate_exec2 = np.array([[60.7, 66.4, 70.6, 72.7, 75.7, 72.9, 74.6, 74.4, 73.8, 71.0, 74, 53, 55, 49],
+                               [57.8, 68.8, 74.7, 80.8, 84.0, 85.6, 88.3, 91.1, 90.3, 90.9, 97.0, 97.3, 97.8, 99]])
+# diff1 = success_rate_exec1[1] - success_rate_exec1[0]
+# diff2 = success_rate_exec2[1] - success_rate_exec2[0]
+plt.plot(num_sim, success_rate_exec1[0], label='Unguided(before)', color='red', linestyle='--')
+plt.plot(num_sim, success_rate_exec1[1], label='Unguided(after)', color='red')
+plt.plot(num_sim, success_rate_exec2[0], label='Guided by scheme1+1+1(before)', color='blue', linestyle='--')
+plt.plot(num_sim, success_rate_exec2[1], label='Guided by scheme1+1+1(after)', color='blue')
+# plt.plot(num_sim, diff1, label='Before')
+# plt.plot(num_sim, diff2, label='After')
 
 # plt.xscale('log')
-# plt.legend()
-# plt.show()
+plt.legend()
+plt.show()
 
 
 # path = os.path.join(os.getcwd(), 'Learning/dataset/mcts_1')
@@ -217,3 +223,10 @@ for d in dataset:
 # print(np.asarray(total_reward_fail).max())
 # # plt.hist(total_reward, bins=110, range=(-10, 100))
 # # plt.savefig('total_reward.png')
+
+# x = np.asarray([0.01, 0.02, 0.02, 0.05, 0.05, 0.03, 0.06, 0.08, 0.10, 0.10, 0.11, 0.12, 0.11, 0.13, 0.14, 0.14, 0.15, 0.17, 0.18, 0.18, 0.19, 0.20, 0.17, 0.21, 0.22, 0.24, 0.24, 0.26, 0.27, 0.28, 0.31, 0.32, 0.32, 0.34, 0.33, 0.35, 0.36, 0.37, 0.39, 0.36, 0.35, 0.37, 0.35, 0.35, 0.38, 0.37, 0.37, 0.41, 0.47, 0.50])
+# print(len(x))
+# y = np.asarray([30.13, 34.52, 33.51, 36.18, 36.51, 31.13, 29.10, 28.59, 28.69, 22.41, 20.14, 28.14, 19.52, 10.52, 24.51, 21.52, 1.50, 15.69, 8.50, 1.50, 18.02, 15.05, 18.69, 14.60, 15.07, -2.69, -8.59, -7.69, -3.73, -20.60, -18.52, -24.49, -21.50, -23.59, -21.52, -20.59, -18.38, -17.28, -19.39, -19.40, -17.50, -16.70, -18.48, -22.40, -15.25, -15.39, -15.20, -21.20, -21.50, -24.39])
+# print(len(y))
+# plt.scatter(x, y)
+# plt.show()

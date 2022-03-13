@@ -22,12 +22,16 @@ from utils import ModelAsTuple, CosineAnnealingWarmUpRestarts, log_gradients
 class Settings(Serializable):
     # Dataset
     path: str = 'Learning/dataset'
-    # data_type: str = 'mcts' # 'mcts' or 'success'
-    data_type: str = 'success' # 'mcts' or 'success'
+    data_type: str = 'mcts' # 'mcts' or 'success'
+    # data_type: str = 'success' # 'mcts' or 'success'
+    # data_type_1: str = 'success' # 'mcts' or 'success'
+    # data_type_2: str = 'mcts' # 'mcts' or 'success'
     randomize: bool = False
     filter: float = 51
-    train_file: str = 'sim_success_2.7_exp_const_30_std0.5' # folder name
-    test_file: str = 'sim_success_2.7_exp_const_30_std0.5'
+    train_file: str = 'mcts_1_exp_const_30_std0.5' # folder name
+    # train_file_1: str = 'sim_success_exp_const_30_std0.5'
+    # train_file_2: str = 'mcts_1_exp_const_30_std0.5'
+    test_file: str = 'mcts_1_exp_const_30_std0.5'
     batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
@@ -87,7 +91,8 @@ class Settings(Serializable):
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
     resume: str = None # checkpoint file name for resuming
-    pre_trained: str = None
+    # pre_trained: str = '2.27_CVAE_sim_mcts_1_dim16/best.pth'
+    pre_trained: str = '2.8_CVAE_sim_dim16/best.pth'
     # pre_trained: str = '12.7_CVAE_mcts2/best.pth' # checkpoint file name for pre-trained model
     # pre_trained: str = '11.23_CVAE_randomized/best.pth' # checkpoint file name for pre-trained model
     # pre_trained: str = '11.29_CVAE_mcts1_filtered/best.pth' # checkpoint file name for pre-trained model
@@ -109,7 +114,10 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '2.8_CVAE_sim_dim16'
+    model_name: str = '3.11_CVAE_mcts_1_dim16'
+    # model_name: str = '3.5_CVAE_sim_mcts_2_dim16'
+    # model_name: str = '2.19_CVAE_mcts_1_dim16'
+    # model_name: str = '2.8_CVAE_sim_dim16'
     # model_name: str = '12.27_CVAE_sim_huge_x'
     # model_name: str = '12.28_CVAE_huge_x_mcts2'
     # model_name: str = '12.27_CVAE_mcts_3'
@@ -129,6 +137,8 @@ def main():
     config = Settings()
     # |TODO| go to Setting()
     train_filename = config.train_file
+    # train_filename_1 = config.train_file_1
+    # train_filename_2 = config.train_file_2
     test_filename = config.test_file
     dataset_path = os.path.join(os.getcwd(), config.path)
     
@@ -146,19 +156,19 @@ def main():
 
         dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
         # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
-        train_dataset = dataset[:-250000]
-        test_dataset = dataset[-250000:]
+        train_dataset = dataset[:-200000]
+        test_dataset = dataset[-200000:]
         
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))
     
     elif config.data_type == 'mcts':
-        # dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
-        # train_dataset = dataset[:90000]
-        # test_dataset = dataset[90000:]
+        dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        train_dataset = dataset[:-20000]
+        test_dataset = dataset[-20000:]
 
-        train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
-        test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
+        # train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
 
         if config.filter:
             filtered_data_train = []
@@ -195,7 +205,54 @@ def main():
     
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))
+
+
+
+    # # For mixed dataset   
+    # train_dataset_1 = glob.glob(f'{dataset_path}/{train_filename_1}/*.pickle')
+       
+    # dataset_2 = glob.glob(f'{dataset_path}/{train_filename_2}/*.pickle')
+    # train_dataset_2 = dataset_2[:100000]
+    # test_dataset = dataset_2[100000:]
+
+    # if config.filter:
+    #     filtered_data_train = []
+    #     filtered_data_test = []
+    #     total_reward_filt = []
+    #     total_reward_not_filt = []
+    #     avg_total_reward_not_filt = 0
+    #     avg_total_reward_filt = 0
+    #     for data in train_dataset_2:
+    #         with open(data, 'rb') as f:
+    #             traj = pickle.load(f)
+    #             avg_total_reward_not_filt += traj[-1]
+    #             total_reward_not_filt.append(traj[-1])
+    #             if traj[-1] > config.filter:
+    #                 filtered_data_train.append(data)
+    #                 avg_total_reward_filt += traj[-1]
+    #                 total_reward_filt.append(traj[-1])
+
+    #     for data in test_dataset:
+    #         with open(data, 'rb') as f:
+    #             traj = pickle.load(f)
+    #             if traj[-1] > config.filter:
+    #                 filtered_data_test.append(data)
+                    
+    #     total_reward_not_filt_std = np.std(np.asarray(total_reward_not_filt))
+    #     total_reward_filt_std = np.std(np.asarray(total_reward_filt))
+    #     print('Average of total reward(not filtered):', avg_total_reward_not_filt/len(train_dataset_2))
+    #     print('std of total reward(not filtered):', total_reward_not_filt_std)
+    #     print('Average of total reward(filtered):', avg_total_reward_filt/len(filtered_data_train))
+    #     print('std of total reward(filtered):', total_reward_filt_std)
+        
+    #     train_dataset = train_dataset_1 + filtered_data_train
+    #     test_dataset = filtered_data_test
     
+    # print('#trajectories of train_dataset:', len(train_dataset))
+    # print('#trajectories of test_dataset:', len(test_dataset))
+
+
+
     # generate dataloader
     train_loader = get_loader(config, train_dataset)
     test_loader = get_loader(config, test_dataset)
