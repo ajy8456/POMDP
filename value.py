@@ -1,3 +1,4 @@
+from itertools import accumulate
 import os
 import time
 import random
@@ -7,15 +8,13 @@ from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 from torch.utils import data
 
-from POMDP_framework import PolicyModel
-
-from Learning.model import GPT2, RNN, LSTM, CVAE
+from Learning.model import GPT2, RNN, LSTM, CVAE, ValueNet
 from Learning.saver import load_checkpoint
 from Learning.utils import CosineAnnealingWarmUpRestarts
 
 
 @dataclass
-class SettingPolicy(Serializable):
+class SettingValue(Serializable):
     # |TODO| modify to automatically change
     dim_observation: int = 2
     dim_action: int = 2
@@ -25,7 +24,7 @@ class SettingPolicy(Serializable):
     seq_len: int = 31
 
     # Architecture
-    model: str = 'CVAE' # GPT or RNN
+    model: str = 'ValueNet'
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 16
@@ -82,40 +81,7 @@ class SettingPolicy(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    # model_name: str = '10.10_CVAE_dim16'
-    # model_name: str = '11.6_CVAE_mcts1'
-    # model_name: str = '11.9_CVAE_randomize1_wo_goal'
-    # model_name: str = '11.9_CVAE_randomize1'
-    # model_name: str = '11.9_CVAE_mcts2'
-    # model_name: str = '11.9_CVAE_mcts1_filtered'
-    # model_name: str = '11.14_CVAE_mcts1_filtered'
-    # model_name: str = '11.22_CVAE_mcts2_filltered'
-    # model_name: str = '11.23_CVAE_randomized'
-    # model_name: str = '11.28_CVAE'
-    # model_name: str = '11.29_CVAE_mcts1,2_filtered_prev'
-    # model_name: str = '11.29_CVAE_mcts1_filtered'
-    # model_name: str = '12.7_CVAE_mcts2'
-    # model_name: str = '12.7_CVAE_mcts2_only'
-    # model_name: str = '12.7_CVAE_mcts1,2'
-    # model_name: str = '12.8_CVAE_mcts2_scratch'
-    # model_name: str = '12.27_CVAE_sim_huge'
-    # model_name: str = '12.27_CVAE_sim_huge_x'
-    # model_name: str = '12.27_CVAE_mcts_3'
-    # model_name: str = '12.28_CVAE_huge_mcts2'
-    # model_name: str = '12.28_CVAE_huge_x_mcts2'
-    # model_name: str = '2.8_CVAE_sim_dim16'
-    # model_name: str = '2.19_CVAE_mcts_1_dim16'
-    # model_name: str = '2.23_CVAE_sim_mcts_1_dim16_50K'
-    # model_name: str = '2.27_CVAE_sim_mcts_1_dim16'
-    # model_name: str = '3.5_CVAE_sim_mcts_2_dim16'
-    # model_name: str = '3.11_CVAE_mcts_1_dim16'
-    # model_name: str = '3.14_CVAE_sim_mcts_3_dim16'
-    # model_name: str = '3.15_CVAE_mcts_2_dim16'
-    # model_name: str = '3.15_CVAE_dim16_randomize_1'
-    # model_name: str = '3.21_CVAE_mcts_3_dim16'
-    # model_name: str = '3.23_CVAE_dim16_randomize_2'
-    # model_name: str = '3.29_CVAE_dim16_sim_60K'
-    model_name: str = '4.17_CVAE'
+    model_name: str = '4.17_ValueNet'
 
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps
@@ -127,23 +93,15 @@ class SettingPolicy(Serializable):
     variance: float = 0.5
 
 
-class NNRegressionPolicyModel(PolicyModel):
-    def __init__(self, config):
+class GuideValueNet():
+    def __init__(self, config, const):
         self.config = config
+        self.const = const
 
         # model
         self.model_dir = os.path.join(config.exp_dir, config.model_name)
         self.device = th.device(config.device)
-        if config.model == 'GPT':
-            self.model = GPT2(config).to(self.device)
-        elif config.model == 'RNN':
-            self.model = RNN(config).to(self.device)
-        elif config.model == 'LSTM':
-            self.model = LSTM(config).to(self.device)
-        elif config.model == 'CVAE':
-            self.model = CVAE(config).to(self.device)
-        else:
-            raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')     
+        self.model = ValueNet(config).to(self.device)
 
         self.model.eval()
 
@@ -179,11 +137,11 @@ class NNRegressionPolicyModel(PolicyModel):
 
     def sample(self, history, goal):
         """
-        infer next_action using neural network
+        infer accumulated reward using neural network
         args:
             history: tuple of current history ((a0, o0, s'0, r0)), (a1, o1, s'1, r1), ... )
         returns:
-            pred(tuple): prediction of next_action
+            pred(float): prediction of accumulated reward
             infer_time(float)
         """
         # fitting form of traj to input of network
@@ -192,19 +150,10 @@ class NNRegressionPolicyModel(PolicyModel):
         # predict next action
 
         with th.no_grad():
-            if self.config.model == 'CVAE':
-                time_start = time.time()
-                pred = self.model.inference(data).squeeze()
-                time_end = time.time()
-                pred = tuple(pred.tolist())
-                infer_time = time_end - time_start
-            else:
-                time_start = time.time()
-                pred = self.model(data)
-                time_end = time.time()
-                # pred = tuple(pred['action'].tolist())
-                pred = tuple((pred['action'] + self.config.variance * th.randn(pred['action'].shape, device=pred['action'].device)).tolist())
-                infer_time = time_end - time_start
+            time_start = time.time()
+            pred = self.model(data).item()
+            time_end = time.time()
+            infer_time = time_end - time_start
 
         return pred, infer_time
     
@@ -251,19 +200,13 @@ class NNRegressionPolicyModel(PolicyModel):
 
         return data
 
-    def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
-        pos = state.position
-        _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
-        _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
-        _action = (_action_x,_action_y)
-        return _action
-
 
 if __name__ == '__main__':
-    nn_config = SettingPolicy()
-    guide_poilcy = NNRegressionPolicyModel(nn_config)
+    nn_config = SettingValue()
+    guide_poilcy = GuideValueNet(nn_config, [0.5, 0.5])
 
     history = (((0, 0), (5.296355492413373, -0.24048282626180972), (2.0623819119018396, 2.1958711763514596), 0), ((2.796929254158842, 2.0435689830185737), (4.690556164130332, 4.491229440722575), (4.747127206199204, 4.527105117508303), -1), )
-    next_action, inference_time = guide_poilcy.sample(history)
-    print(next_action, type(next_action))
+    goal = (0, 0)
+    accumulated_reward, inference_time = guide_poilcy.sample(history, goal)
+    print(accumulated_reward, type(accumulated_reward))
     print(inference_time)

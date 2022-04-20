@@ -12,7 +12,7 @@ def launch(obj1_pos, obj1_ori, obj2_pos, obj2_ori) :
     start = env.reset(obj1_pos=obj1_pos, obj1_ori=obj1_ori, obj2_pos=obj2_pos, obj2_ori=obj2_ori)
     sum_reward = 0
     search_height = 0.2
-    env.debugparameter(start)
+    # env.debugparameter(start)
 
     for t in range(10000):
         '''gave arbitrary goal poses'''

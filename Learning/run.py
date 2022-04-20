@@ -10,8 +10,8 @@ import numpy as np
 from tensorboardX import SummaryWriter
 
 from load import get_loader
-from model import GPT2, RNN, LSTM, CVAE
-from loss import RegressionLoss, ELBOLoss
+from model import GPT2, RNN, LSTM, CVAE, ValueNet
+from loss import RegressionLossPolicy, RegressionLossValue, ELBOLoss
 from trainer import Trainer
 from evaluator import Evaluator
 from saver import save_checkpoint, load_checkpoint
@@ -24,10 +24,14 @@ class Settings(Serializable):
     path: str = 'Learning/dataset'
     # data_type: str = 'mcts' # 'mcts' or 'success'
     data_type: str = 'success' # 'mcts' or 'success'
-    randomize: bool = False
+    # data_type_1: str = 'success' # 'mcts' or 'success'
+    # data_type_2: str = 'mcts' # 'mcts' or 'success'
+    randomize: bool = True
     filter: float = 51
-    train_file: str = 'sim_success_2.7_exp_const_30_std0.5' # folder name
-    test_file: str = 'sim_success_2.7_exp_const_30_std0.5'
+    train_file: str = 'sim_success_randomize_1' # folder name
+    # train_file_1: str = 'sim_success_exp_const_30_std0.5'
+    # train_file_2: str = 'mcts_1_exp_const_30_std0.5'
+    test_file: str = 'sim_success_randomize_1'
     batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
@@ -40,11 +44,13 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'CVAE' # GPT or RNN or LSTM or CVAE
+    model: str = 'CVAE' # GPT or RNN or LSTM or CVAE or ValueNet or PolicyValueNet
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 16
     dim_hidden: int = 16
+    # dim_embed: int = 32
+    # dim_hidden: int = 32
     # dim_embed: int = 64
     # dim_hidden: int = 64
     # dim_embed: int = 128
@@ -55,6 +61,10 @@ class Settings(Serializable):
     num_heads: int = 1
     dim_ffn: int = 16 * 4
     num_layers: int = 3
+    # dim_head: int = 32
+    # num_heads: int = 1
+    # dim_ffn: int = 32 * 4
+    # num_layers: int = 3
     # dim_head: int = 64
     # num_heads: int = 1
     # dim_ffn: int = 64 * 4
@@ -67,6 +77,8 @@ class Settings(Serializable):
     # for CVAE
     latent_size: int = 16
     dim_condition: int = 16
+    # latent_size: int = 32
+    # dim_condition: int = 32
     # latent_size: int = 64
     # dim_condition: int = 64
     # latent_size: int = 128
@@ -86,8 +98,15 @@ class Settings(Serializable):
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    resume: str = None # checkpoint file name for resuming
+    # resume: str = None # checkpoint file name for resuming
+    resume: str = 'ckpt_epoch_280.pth' # checkpoint file name for resuming
     pre_trained: str = None
+    # pre_trained: str = '3.15_CVAE_dim16_randomize_1/best.pth'
+    # pre_trained: str = '3.15_CVAE_mcts_2_dim16/best.pth'
+    # pre_trained: str = '3.11_CVAE_mcts_1_dim16/best.pth'
+    # pre_trained: str = '3.5_CVAE_sim_mcts_2_dim16/best.pth'
+    # pre_trained: str = '2.27_CVAE_sim_mcts_1_dim16/best.pth'
+    # pre_trained: str = '2.8_CVAE_sim_dim16/best.pth'
     # pre_trained: str = '12.7_CVAE_mcts2/best.pth' # checkpoint file name for pre-trained model
     # pre_trained: str = '11.23_CVAE_randomized/best.pth' # checkpoint file name for pre-trained model
     # pre_trained: str = '11.29_CVAE_mcts1_filtered/best.pth' # checkpoint file name for pre-trained model
@@ -109,14 +128,13 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '2.8_CVAE_sim_dim16'
-    # model_name: str = '12.27_CVAE_sim_huge_x'
-    # model_name: str = '12.28_CVAE_huge_x_mcts2'
-    # model_name: str = '12.27_CVAE_mcts_3'
+    model_name: str = '4.17_CVAE'
+    # model_name: str = '4.17_ValueNet'
+
     print_freq: int = 100 # per train_steps
     train_eval_freq: int = 100 # per train_steps
     test_eval_freq: int = 10 # per epochs
-    save_freq: int = 20 # per epochs
+    save_freq: int = 10 # per epochs
 
     log_para: bool = False
     log_grad: bool = False
@@ -129,6 +147,8 @@ def main():
     config = Settings()
     # |TODO| go to Setting()
     train_filename = config.train_file
+    # train_filename_1 = config.train_file_1
+    # train_filename_2 = config.train_file_2
     test_filename = config.test_file
     dataset_path = os.path.join(os.getcwd(), config.path)
     
@@ -146,19 +166,21 @@ def main():
 
         dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
         # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
-        train_dataset = dataset[:-250000]
-        test_dataset = dataset[-250000:]
-        
+        train_dataset = dataset[:1500000]
+        test_dataset = dataset[-200000:]
+        # train_dataset = dataset[:60000]
+        # test_dataset = dataset[-10000:]
+
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))
     
     elif config.data_type == 'mcts':
-        # dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
-        # train_dataset = dataset[:90000]
-        # test_dataset = dataset[90000:]
+        dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        train_dataset = dataset[:-30000]
+        test_dataset = dataset[-30000:]
 
-        train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
-        test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
+        # train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
+        # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
 
         if config.filter:
             filtered_data_train = []
@@ -195,7 +217,54 @@ def main():
     
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))
+
+
+
+    # # For mixed dataset   
+    # train_dataset_1 = glob.glob(f'{dataset_path}/{train_filename_1}/*.pickle')
+       
+    # dataset_2 = glob.glob(f'{dataset_path}/{train_filename_2}/*.pickle')
+    # train_dataset_2 = dataset_2[:100000]
+    # test_dataset = dataset_2[100000:]
+
+    # if config.filter:
+    #     filtered_data_train = []
+    #     filtered_data_test = []
+    #     total_reward_filt = []
+    #     total_reward_not_filt = []
+    #     avg_total_reward_not_filt = 0
+    #     avg_total_reward_filt = 0
+    #     for data in train_dataset_2:
+    #         with open(data, 'rb') as f:
+    #             traj = pickle.load(f)
+    #             avg_total_reward_not_filt += traj[-1]
+    #             total_reward_not_filt.append(traj[-1])
+    #             if traj[-1] > config.filter:
+    #                 filtered_data_train.append(data)
+    #                 avg_total_reward_filt += traj[-1]
+    #                 total_reward_filt.append(traj[-1])
+
+    #     for data in test_dataset:
+    #         with open(data, 'rb') as f:
+    #             traj = pickle.load(f)
+    #             if traj[-1] > config.filter:
+    #                 filtered_data_test.append(data)
+                    
+    #     total_reward_not_filt_std = np.std(np.asarray(total_reward_not_filt))
+    #     total_reward_filt_std = np.std(np.asarray(total_reward_filt))
+    #     print('Average of total reward(not filtered):', avg_total_reward_not_filt/len(train_dataset_2))
+    #     print('std of total reward(not filtered):', total_reward_not_filt_std)
+    #     print('Average of total reward(filtered):', avg_total_reward_filt/len(filtered_data_train))
+    #     print('std of total reward(filtered):', total_reward_filt_std)
+        
+    #     train_dataset = train_dataset_1 + filtered_data_train
+    #     test_dataset = filtered_data_test
     
+    # print('#trajectories of train_dataset:', len(train_dataset))
+    # print('#trajectories of test_dataset:', len(test_dataset))
+
+
+
     # generate dataloader
     train_loader = get_loader(config, train_dataset)
     test_loader = get_loader(config, test_dataset)
@@ -208,10 +277,12 @@ def main():
         model = RNN(config).to(device)
     elif config.model == 'LSTM':
         model = LSTM(config).to(device)
-    elif config.model == 'CVAE':
+    elif config.model == 'CVAE' or config.model == 'PolicyValueNet':
         model = CVAE(config).to(device)
+    elif config.model == 'ValueNet':
+        model = ValueNet(config).to(device)
     else:
-        raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", or "LSTM".')
+        raise Exception(f'"{config.model}" is not support!! You should select "GPT", "RNN", "LSTM", "CVAE", "ValueNet", or "PolicyValueNet.')
 
     # optimizer
     optimizer = th.optim.AdamW(model.parameters(),
@@ -234,12 +305,19 @@ def main():
         raise Exception(f'"{config.optimizer}" is not support!! You should select "AdamW" or "AdamWR".')
 
     # Metric
+    # |TODO| implement Chamfer distance
     if config.model == 'CVAE':
         loss_fn = ELBOLoss(config)
         eval_fn = ELBOLoss(config)
+    elif config.model == 'ValueNet':
+        loss_fn = RegressionLossValue(config)
+        eval_fn = RegressionLossValue(config)
+    elif config.model == 'PolicyValueNet':
+        loss_fn = None
+        eval_fn = None
     else:
-        loss_fn = RegressionLoss(config)
-        eval_fn = RegressionLoss(config)
+        loss_fn = RegressionLossPolicy(config)
+        eval_fn = RegressionLossPolicy(config)
 
     # Trainer & Evaluator
     trainer = Trainer(config=config,
@@ -297,13 +375,20 @@ def main():
             logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
             logger.add_scalar('Loss(Reconstruction)/train', train_loss['Recon'], epoch)
             logger.add_scalar('Loss(KL_divergence)/train', train_loss['KL_div'], epoch)
+        elif config.model == 'ValueNet':
+            logger.add_scalar('Loss/train', train_loss['total'], epoch)
+        elif config.model == 'PolicyValueNet':
+            logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
+            logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
+            logger.add_scalar('Loss(accumulated reward)/train', train_loss['accumulated_reward'], epoch)
+            # logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
         else:
             logger.add_scalar('Loss(total)/train', train_loss['total'], epoch)
             logger.add_scalar('Loss(action)/train', train_loss['action'], epoch)
             # if config.use_reward:
             #     logger.add_scalar('Loss(reward)/train', train_loss['reward'], epoch)
 
-            logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
+            # logger.add_scalar('Eval(action)/train', train_val['action'], epoch)
             # if config.use_reward:
             #     logger.add_scalar('Eval(reward)/train', train_val['reward'], epoch)
 
@@ -317,7 +402,7 @@ def main():
 
             # save the best model
             # |TODO| change 'action' to 'total' @ trainer.py & evaluator.py -> merge 'CVAE' & others
-            if config.model == 'CVAE':
+            if config.model == 'CVAE' or config.model == 'ValueNet' or config.model == 'PolicyValueNet':
                 if test_val['total'] < best_error:
                     best_error = test_val['total']
 
@@ -347,6 +432,12 @@ def main():
                 logger.add_scalar('Eval(total)/test', test_val['total'], epoch)
                 logger.add_scalar('Eval(Reconstruction)/test', test_val['Recon'], epoch)
                 logger.add_scalar('Eval(KL_divergence)/test', test_val['KL_div'], epoch)
+            elif config.model == 'ValueNet':
+                logger.add_scalar('Eval/test', test_val['total'], epoch)
+            elif config.model == 'PolicyValueNet':
+                logger.add_scalar('Eval(total)/test', test_val['total'], epoch)
+                logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
+                logger.add_scalar('Eval(accumulated reward)/test', test_val['accumulated_reward'], epoch)
             else:
                 logger.add_scalar('Eval(action)/test', test_val['action'], epoch)
                 # if config.use_reward:

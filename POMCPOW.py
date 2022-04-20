@@ -10,7 +10,7 @@ import math
 import pickle
 import numpy as np
 
-# import pdb
+import pdb
 
 
 class POMCPOW(Planner):
@@ -75,7 +75,7 @@ class POMCPOW(Planner):
         """Returns the amount of time (seconds) ran for the last `plan` call."""
         return self._last_planning_time
     
-    def plan(self, agent, horizon, logging=False, save_sim_name=False, guide=False, rollout_guide=False):
+    def plan(self, agent, horizon, logging=False, save_sim_name=False, randomize=False, guide_policy=False, rollout_guide=False, guide_value=False):
         # Only works if the agent's belief is particles
         if not isinstance(agent.belief, Particles):
             raise TypeError("Agent's belief is not represented in particles.\n"\
@@ -107,7 +107,7 @@ class POMCPOW(Planner):
             # init_observation = agent._observation_model.sample(state, (0,0))
             # simulate_history = (((0,0), init_observation.position, state.position, 0),)
 
-            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_sim_name=save_sim_name, guide=guide, rollout_guide=rollout_guide)
+            total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, save_sim_name=save_sim_name, guide_policy=guide_policy, rollout_guide=rollout_guide, guide_value=guide_value, randomize=randomize)
             # total_reward = self._simulate(state, simulate_history, self._agent.tree, None, None, len(simulate_history), logging=logging, guide=guide, rollout_guide=rollout_guide)
 
 
@@ -162,22 +162,22 @@ class POMCPOW(Planner):
         data = (agent.history, sampled_action, p_action, num_visits_action, val_action, val_root)
 
         # next_action: sampling with probabilty of p_action or best_action
-        # next_action = best_action
-        next_action = sampled_action[np.random.choice(np.arange(len(p_action)), p=p_action)]
+        next_action = best_action
+        # next_action = sampled_action[np.random.choice(np.arange(len(p_action)), p=p_action)]
 
         # print("b0:", self._agent.tree.belief.particles)
         return next_action, time_taken, sims_count, num_sims_success, val_root, self._agent.tree[best_action].value, data
 
     # |NOTE| uniformly random
     # |TODO| move to light_dark_problem.py and make NotImplementedError because this is only for light dark domain
-    def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
-        pos = state.position
-        _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
-        _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
-        _action = (_action_x,_action_y)
-        return _action
+    # def _NextAction(self, state, x_range=(-1,6), y_range=(-1,6)):
+    #     pos = state.position
+    #     _action_x = random.uniform(x_range[0] - pos[0], x_range[1] - pos[0])
+    #     _action_y = random.uniform(y_range[0] - pos[1], y_range[1] - pos[1])
+    #     _action = (_action_x,_action_y)
+    #     return _action
 
-    def _ActionProgWiden(self, vnode, history, state, guide, k_a=2, alpha_a=1/2):
+    def _ActionProgWiden(self, vnode, history, state, guide_policy, k_a=2, alpha_a=1/2):
         _history = vnode
 
         # # For experiment
@@ -197,12 +197,12 @@ class POMCPOW(Planner):
         # return test_action
 
         if len(_history.children) <= k_a*_history.num_visits**alpha_a:
-            if guide:
-                # # Adding stochasticity
-                # if _history.num_visits%4 == 3:
-                #     _action = self._NextAction(state)
-                # else:
-                _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
+            if guide_policy:
+                # Adding stochasticity
+                if _history.num_visits%4 == 3:
+                    _action = self._pomdp.agent._policy_model._NextAction(state)
+                else:
+                    _action, inference_time = self._agent._policy_model.sample(history, self._pomdp.goal_state.position)
                     # print("Inference time:", inference_time)
             else:
                 # # testing for optimal solution
@@ -221,9 +221,9 @@ class POMCPOW(Planner):
                 #         avg_belief = expectation_belief(self._agent.belief)
                 #         _action = (-(avg_belief[0]+2.5), -(avg_belief[1]-1.25))
                 #     else:
-                #         _action = self._NextAction(state)
+                #         _action = self._pomdp.agent._policy_model._NextAction(state)
                 # else:
-                _action = self._NextAction(state)
+                _action = self._pomdp.agent._policy_model._NextAction(state)
 
             if vnode[_action] is None:
                 history_action_node = QNode(self._num_visits_init, self._value_init)
@@ -243,7 +243,7 @@ class POMCPOW(Planner):
 
         return self._ucb(vnode)
 
-    def _simulate(self, state, history, root, parent, observation, depth, logging, save_sim_name, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
+    def _simulate(self, state, history, root, parent, observation, depth, logging, save_sim_name, guide_policy, rollout_guide, guide_value, randomize, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
     # def _simulate(self, state, history, root, parent, observation, depth, logging, guide, rollout_guide, k_o=2, alpha_o=1/2): # root<-class:VNode, parent<-class:QNode
         if depth > self._max_depth:
             return 0
@@ -265,7 +265,7 @@ class POMCPOW(Planner):
         # print("call _ActionProgWiden()")
         # ################################################################
 
-        action = self._ActionProgWiden(vnode=root, history=history, state=state, guide=guide)
+        action = self._ActionProgWiden(vnode=root, history=history, state=state, guide_policy=guide_policy)
 
         # ################################################################
         # print(f"return _ucb() & _ActionProgWiden(): action {action}")
@@ -293,8 +293,6 @@ class POMCPOW(Planner):
             # print(f"#V children is full: {num_v}")
             # ################################################################
 
-        history += ((action, observation.position, next_state.position, reward), )
-
         prob = self._pomdp.agent._observation_model.probability(observation, next_state, next_state, action)
 
         if observation not in root[action].children:
@@ -303,8 +301,11 @@ class POMCPOW(Planner):
             root[action][observation] = self._VNode(agent=self._agent, root=False)
             root[action][observation].belief[next_state] = prob
 
+            history += ((action, observation.position, next_state.position, reward), )
+
             # |NOTE| if new observation node already achieve goal condition, then return simulate() without calling rollout()
             if self._pomdp.env.reward_model.is_goal_state(next_state):
+
                 total_reward = reward
         
                 root.num_visits += 1
@@ -321,6 +322,8 @@ class POMCPOW(Planner):
                 if save_sim_name:
                     # self.history_data.append(history)
                     sim_data = np.asarray(history)
+                    if randomize:
+                        sim_data = (sim_data, self._pomdp.goal_state.position)
                     with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
                         pickle.dump(sim_data, f)
                     self.num_sim_data += 1
@@ -332,8 +335,16 @@ class POMCPOW(Planner):
             # print("call _rollout()")
             # ################################################################
 
-            total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_sim_name=save_sim_name, rollout_guide=rollout_guide)
-            # total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, rollout_guide=rollout_guide)
+            if guide_value:
+                accumulated_reward_const = self._pomdp.env.reward_model.valuenet.const
+                if accumulated_reward_const[0]: # rollout and value network
+                    accumulated_reward = accumulated_reward_const[0] * self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_sim_name=save_sim_name, rollout_guide=rollout_guide, randomize=randomize) \
+                                       + accumulated_reward_const[1] * self._pomdp.env.reward_model.valuenet.sample(history, self._pomdp.goal_state.position)[0]
+                else: # value network only
+                    accumulated_reward = self._pomdp.env.reward_model.valuenet.sample(history, self._pomdp.goal_state.position)[0]
+                total_reward = reward + accumulated_reward
+            else:
+                total_reward = reward + self._rollout(next_state, history, root[action][observation], depth+1, logging=logging, save_sim_name=save_sim_name, rollout_guide=rollout_guide, randomize=randomize)
 
         else:
             # |NOTE| append s` to B(hao)
@@ -349,12 +360,15 @@ class POMCPOW(Planner):
             # |NOTE| r <- R(s,a,s`)
             reward = self._agent.reward_model.sample(state, action, next_state)
 
+            history += ((action, observation.position, next_state.position, reward), )
+
             # ################################################################
             # print(f"sampling new reward, because observation is change: {reward}")
             # ################################################################
 
             # |NOTE| check goal condition while simulating 
             if self._pomdp.env.reward_model.is_goal_state(next_state):
+
                 total_reward = reward
         
                 root.num_visits += 1
@@ -371,6 +385,8 @@ class POMCPOW(Planner):
                 if save_sim_name:
                     # self.history_data.append(history)
                     sim_data = np.asarray(history)
+                    if randomize:
+                        sim_data = (sim_data, self._pomdp.goal_state.position)
                     with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
                         pickle.dump(sim_data, f)
                     self.num_sim_data += 1
@@ -389,15 +405,14 @@ class POMCPOW(Planner):
                                                                             depth+nsteps,
                                                                             logging=logging,
                                                                             save_sim_name=save_sim_name,
-                                                                            guide=guide,
-                                                                            rollout_guide=rollout_guide)
+                                                                            guide_policy=guide_policy,
+                                                                            rollout_guide=rollout_guide,
+                                                                            guide_value=guide_value,
+                                                                            randomize=randomize)
         
             # ################################################################
             # print("return nested _simulate()")
             # ################################################################
-
-        # if total_reward > 100:
-        #     pdb.set_trace()
 
         # |TODO| agent.tree->Q->V check
         root.num_visits += 1
@@ -410,8 +425,7 @@ class POMCPOW(Planner):
 
         return total_reward
 
-    def _rollout(self, state, history, root, depth, logging, save_sim_name, rollout_guide=False): # root<-class:VNode
-    # def _rollout(self, state, history, root, depth, logging, rollout_guide=False): # root<-class:VNode
+    def _rollout(self, state, history, root, depth, logging, save_sim_name, randomize, rollout_guide=False): # root<-class:VNode
         discount = self._discount_factor
         total_discounted_reward = 0.0
 
@@ -419,7 +433,7 @@ class POMCPOW(Planner):
             if rollout_guide:
                 action, _ = self._agent._policy_model.sample(history)
             else:
-                action = self._NextAction(state)
+                action = _action = self._pomdp.agent._policy_model._NextAction(state)
             next_state, observation, reward, nsteps = sample_generative_model(self._agent, state, action)
 
             if logging:
@@ -429,6 +443,10 @@ class POMCPOW(Planner):
 
             # |NOTE| check goal condition while rollout
             if self._pomdp.env.reward_model.is_goal_state(next_state):
+
+                if reward < 0.0:
+                    pdb.set_trace()
+
                 depth += nsteps
 
                 total_discounted_reward += reward * discount
@@ -445,6 +463,8 @@ class POMCPOW(Planner):
                 if save_sim_name:
                     # self.history_data.append(history)
                     sim_data = np.asarray(history)
+                    if randomize:
+                        sim_data = (sim_data, self._pomdp.goal_state.position)
                     with open(os.path.join(self.save_dir_sim, f'{save_sim_name}_{self.num_sim_data}.pickle'), 'wb') as f:
                         pickle.dump(sim_data, f)
                     self.num_sim_data += 1
@@ -566,7 +586,8 @@ class POMCPOW(Planner):
             new_belief, prediction = bootstrap_filter(tree_belief, next_state, real_action, real_observation, agent.observation_model, agent.transition_model, len(agent.init_belief))
             # time_end = time.time()
             # print("Bootstrap filtering time:", time_end - time_start)
-            check_goal = env.reward_model.is_goal_particles(prediction)
+            # check_goal = env.reward_model.is_goal_particles(prediction)
+            check_goal = env.reward_model.is_goal_state(next_state)
             agent.set_belief(new_belief)
 
         # |NOTE| belief state update by Bayes' law(when belief is represented by Histogram)
@@ -577,7 +598,8 @@ class POMCPOW(Planner):
                                                  agent.transition_model)
             agent.set_belief(new_belief)        
             # |TODO| change as Particles - check using prediction
-            check_goal = env.reward_model.is_goal_hist(new_belief)
+            # check_goal = env.reward_model.is_goal_hist(new_belief)
+            check_goal = env.reward_model.is_goal_state(next_state)
 
         if agent.tree is not None:
             agent.tree.belief = copy.deepcopy(agent.belief)

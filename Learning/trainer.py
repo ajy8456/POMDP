@@ -1,3 +1,4 @@
+from itertools import accumulate
 import time
 import torch as th
 from typing import (Union, Callable, List, Dict, Tuple, Optional, Any)
@@ -46,11 +47,36 @@ class Trainer(object):
             progress = ProgressMeter(len(self.loader),
                                      [batch_time, losses_elbo, vals_elbo],
                                      prefix="Epoch: [{}]".format(epoch))
-            
+        
+        elif self.config.model == 'ValueNet':
+            losses_total = AverageMeter('MSELoss', ':.4e')
+            vals_total = AverageMeter('MSELoss', ':.4e')
+
+            progress = ProgressMeter(len(self.loader),
+                                     [batch_time, losses_total, vals_total],
+                                     prefix="Epoch: [{}]".format(epoch))
+
+        elif self.config.model == 'PolicyValueNet':
+            losses_total = AverageMeter('Total Loss', ':.4e')
+            losses_elbo = AverageMeter('Action ELBOLoss', ':.4e')
+            losses_recon = AverageMeter('Action Reconstruction Error', ':.4e')
+            losses_kld = AverageMeter('Action KL-divergence', ':.4e')
+            losses_mse = AverageMeter('Accumulated Reward MSELoss', ':.4e')
+
+            vals_total = AverageMeter('Total Eval', ':.4e')
+            vals_elbo = AverageMeter('Action ELBOLoss', ':.4e')
+            vals_recon = AverageMeter('Action Reconstruction Error', ':.4e')
+            vals_kld = AverageMeter('Action KL-divergence', ':.4e')
+            vals_mse = AverageMeter('Accumulated Reward MSELoss', ':.4e')
+
+            progress = ProgressMeter(len(self.loader),
+                                     [batch_time, losses_total, vals_total],
+                                     prefix="Epoch: [{}]".format(epoch))
+                        
         else:
             losses_total = AverageMeter('Total Loss', ':.4e')
-            losses_action = AverageMeter('Action SmoothL1Loss', ':.4e')
-            vals_action = AverageMeter('Action SmoothL1Loss', ':.4e')
+            losses_action = AverageMeter('Action MSELoss', ':.4e')
+            vals_action = AverageMeter('Action MSELoss', ':.4e')
 
             progress = ProgressMeter(len(self.loader),
                                      [batch_time, losses_total, vals_action],
@@ -62,7 +88,9 @@ class Trainer(object):
         for i, data in enumerate(self.loader):
             target = {}
             target_action = th.squeeze(data['next_action'])
+            target_value = th.squeeze(data['accumulated_reward'])
             target['action'] = target_action
+            target['accumulated_reward'] = target_value
             # if self.config.use_reward:
             #     target_reward = th.squeeze(data['next_reward'])
             #     target['reward'] = target_reward
@@ -79,6 +107,30 @@ class Trainer(object):
                 losses['total'] = losses_elbo.avg
                 losses['Recon'] = losses_recon.avg
                 losses['KL_div'] = losses_kld.avg
+
+            elif self.config.model == 'ValueNet':
+                pred = self.model(data)
+                loss = self.loss_fn(pred, target['accumulated_reward'])
+
+                losses_total.update(loss['total'].item(), data['observation'].size(0))
+                losses['total'] = losses_total.avg
+
+            elif self.config.model == 'PolicyValueNet':
+                value, recon_x, mean, log_var, z = self.model(data)
+                loss = self.loss_fn(value, recon_x, target, mean, log_var)
+
+                losses_total.updata(loss['total'].item(), data['observation'].size(0))
+                losses_elbo.update(loss['ELBO'].item(), data['observation'].size(0))
+                losses_recon.update(loss['Recon'].item(), data['observation'].size(0))
+                losses_kld.update(loss['KL_div'].item(), data['observation'].size(0))
+                losses_mse.update(loss['MSE'].item(), data['observation'].size(0))
+            
+                losses['total'] = losses_total.avg
+                losses['ELBO'] = losses_elbo.avg
+                losses['Recon'] = losses_recon.avg
+                losses['KL_div'] = losses_kld.avg
+                losses['MSE'] = losses_mse.avg
+
             else:
                 pred = self.model(data)
                 loss = self.loss_fn(pred, target)
@@ -120,6 +172,28 @@ class Trainer(object):
                         vals['total'] = vals_elbo.avg
                         vals['Recon'] = vals_recon.avg
                         vals['KL_div'] = vals_kld.avg
+                    
+                    elif self.config.model == 'ValueNet':
+                        val = self.eval_fn(pred, target['accumulated_reward'])
+                        
+                        vals_total.update(val['total'].item(), data['observation'].size(0))                
+                        vals['total'] = vals_total.avg
+
+                    elif self.config.model == 'PolicyValueNet':
+                        val = self.eval_fn(value, recon_x, target, mean, log_var)
+
+                        vals_total.updata(val['total'].item(), data['observation'].size(0))
+                        vals_elbo.update(val['ELBO'].item(), data['observation'].size(0))
+                        vals_recon.update(val['Recon'].item(), data['observation'].size(0))
+                        vals_kld.update(val['KL_div'].item(), data['observation'].size(0))
+                        vals_mse.update(val['MSE'].item(), data['observation'].size(0))
+                    
+                        vals['total'] = vals_total.avg
+                        vals['ELBO'] = vals_elbo.avg
+                        vals['Recon'] = vals_recon.avg
+                        vals['KL_div'] = vals_kld.avg
+                        vals['MSE'] = vals_mse.avg
+
                     else:
                         val = self.eval_fn(pred, target)
                 
