@@ -11,7 +11,7 @@ class ModelAsTuple(th.nn.Module):
         self.model = model
 
     def forward(self, inputs):
-        if self.config.model == 'CVAE':
+        if self.config.model == 'CVAE' or self.config.model == 'ValueNet' or self.config.model == 'PolicyValueNet':
             return tuple(v[0] for v in self.model(inputs))
         return tuple(v for (k, v) in self.model(inputs).items())
 

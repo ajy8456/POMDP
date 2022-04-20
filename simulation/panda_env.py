@@ -46,7 +46,7 @@ class PandaEnv():
         self.plainID = p.loadURDF("plane.urdf", basePosition=[0, 0, -0.65])
         self.objectUid = []
         for i in range(objcount) :
-            self.objectUid.append(p.loadURDF("longcube.urdf", basePosition = objpos[i], baseOrientation=p.getQuaternionFromEuler(objori[i]), globalScaling = 0.1))
+            self.objectUid.append(p.loadURDF("simulation/longcube.urdf", basePosition = objpos[i], baseOrientation=p.getQuaternionFromEuler(objori[i]), globalScaling = 0.1))
 
         rest_poses = [0, -0.215, 0, -2.57, 0, 2.356, 2.356, 0.08, 0.08]
         for i in range(7):
@@ -77,6 +77,9 @@ class PandaEnv():
         ]
         path_conf = plan_joint_motion(self.pandaUid, list(range(7)), jointPoses,
                                       obstacles=obstacles, algorithm='birrt')
+        
+        # self.render()
+        
         # path_conf = plan_joint_motion(self.pandaUid, list(range(7)), jointPoses, max_distance=1e-5,
                                       # obstacles=obstacles)
         # if path_conf is None:

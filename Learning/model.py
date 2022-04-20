@@ -279,7 +279,7 @@ class GPT2(nn.Module):
 
         # self.ln2 = nn.LayerNorm(self.dim_hidden)
 
-        if config.model == 'CVAE':
+        if config.model == 'CVAE' or 'ValueNet' or 'PolicyValueNet':
             # self.fc_condi = nn.Sequential(*([nn.Linear(self.seq_len * self.dim_hidden, self.config.dim_condition)] + ([nn.Tanh()] if self.action_tanh else [])))
             if config.randomize:
                 self.fc_condi = nn.Linear((self.seq_len + 1) * self.dim_hidden, self.config.dim_condition)
@@ -359,7 +359,7 @@ class GPT2(nn.Module):
         # if self.config.print_in_out:
             # print(f"Input of action predict FC:", dec_outputs)
 
-        if self.config.model == 'CVAE':
+        if self.config.model == 'CVAE' or 'ValueNet' or 'PolicyValueNet':
             # out = self.fc_condi(dec_outputs.flatten(start_dim=1))
             out = F.gelu(self.fc_condi(dec_outputs.flatten(start_dim=1)))
         else:    
@@ -613,6 +613,25 @@ class CVAE(nn.Module):
         recon_x = self.decoder(z, c)
 
         return recon_x
+
+
+class ValueNet(nn.Module):
+    def __init__(self, config):
+        super(ValueNet, self).__init__()
+
+        self.config = config
+        self.condition = GPT2(config)
+        self.fc = nn.Linear(config.dim_condition, 1)
+        # self.fc1 = nn.Linear(config.dim_condition, config.dim_condition)
+        # self.fc2 = nn.Linear(config.dim_condition, 1)
+
+    def forward(self, data):
+        c = self.condition(data)
+        accumulated_reward = self.fc(c)
+        # accumulated_reward = F.relu(self.fc1(c))
+        # accumulated_reward = self.fc2(accumulated_reward)
+
+        return accumulated_reward
 
 
 if __name__ == '__main__':

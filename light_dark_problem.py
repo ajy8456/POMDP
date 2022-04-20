@@ -14,7 +14,8 @@ from matplotlib import animation
 import time
 import pickle
 
-from policy import Settings, NNRegressionPolicyModel
+from policy import SettingPolicy, NNRegressionPolicyModel
+from value import SettingValue, GuideValueNet
 
 
 class State(State):
@@ -238,10 +239,11 @@ class ObservationModel(ObservationModel):
 
 
 class RewardModel(RewardModel):
-    def __init__(self, light, goal_state, epsilon):
+    def __init__(self, light, goal_state, epsilon, valuenet=None):
         self.light = light
         self._goal_state = goal_state
         self._epsilon=epsilon
+        self.valuenet = valuenet
 
     def _reward_func_state(self, state: State, action, next_state: State, goal_state: State, epsilon):
         if np.sum((np.asarray(goal_state.position) - np.asarray(next_state.position))**2) < epsilon**2:
@@ -361,26 +363,25 @@ class LightDarkEnvironment(Environment):
 
 
 class LightDarkProblem(POMDP):
-    def __init__(self, init_state, init_belief, goal_state, light, const, epsilon, guide_policy=None):
-        if guide_policy is not None:
-            # nn_config = Settings()
-            # guide_policy = NNRegressionPolicyModel(nn_config)
-            agent = Agent(init_belief,
-                      guide_policy,
-                      TransitionModel(),
-                      ObservationModel(light,const),
-                      RewardModel(light, goal_state, epsilon))
+    def __init__(self, init_state, init_belief, goal_state, light, const, epsilon, policynet=None, valuenet=None):
+        if policynet is not None:
+            if valuenet is not None:
+                agent = Agent(init_belief,
+                            policynet,
+                            TransitionModel(),
+                            ObservationModel(light,const),
+                            RewardModel(light, goal_state, epsilon, valuenet))
         else:
             agent = Agent(init_belief,
                         PolicyModel(),
                         TransitionModel(),
                         ObservationModel(light,const),
-                        RewardModel(light, goal_state, epsilon))
+                        RewardModel(light, goal_state, epsilon, valuenet))
 
         env = LightDarkEnvironment(init_state,                  # init state
                                    light,                       # light
                                    const,                       # const
-                                   RewardModel(light, goal_state, epsilon))     # reward model
+                                   RewardModel(light, goal_state, epsilon, valuenet))     # reward model
         
         self.goal_state = goal_state
         
@@ -613,14 +614,19 @@ def main():
     plotting = None
     save_log = False
     save_data = True
-    # save_sim_data = 'sim_success_mcts2_5'
     save_sim_data = False
-    name_dataset = 'mcts_1_20'
+    # save_sim_data = 'sim_success_randomize_1_5'
+    name_dataset = 'mcts_1_1'
     # name_dataset = None
     exp = False
 
-    guide = True
+    randomize = True
+
+    guide_policy = True
+    guide_value = True
+    guide_value_const = [0.0, 1.0] # [rollout, network]
     rollout_guide = False
+    only_guide = False
 
     # Environment Setting
     # define the observation noise equation.
@@ -637,16 +643,17 @@ def main():
 
     num_sucess = 0
     num_fail = 0
-    num_planning = 10000
+    num_planning = 1000
     num_particles = 100
 
     if save_data:
-        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_2_exp_const_30_std0.5')
+        save_dir = os.path.join(os.getcwd(),'Learning/dataset', 'mcts_1')
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
             
     if save_sim_data:
-        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_mcts2_exp_const_30_std0.5')
+        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_randomize_1')
+        # save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'test')
         if not os.path.exists(save_dir_sim):
             os.mkdir(save_dir_sim)
     else:
@@ -670,11 +677,17 @@ def main():
     log_val_action_step = []
     # log_sim_success_rate_step1 = []
 
-    if guide:
-        nn_config = Settings()
-        guide_policy = NNRegressionPolicyModel(nn_config)
+    if guide_policy:
+        nn_config_policy = SettingPolicy()
+        policynet = NNRegressionPolicyModel(nn_config_policy)
     else:
-        guide_policy = None
+        policynet = None
+
+    if guide_value:
+        nn_config_value = SettingValue()
+        valuenet = GuideValueNet(nn_config_value, guide_value_const)
+    else:
+        valuenet = None
 
     for n in range(num_planning):
         print("========================================================") 
@@ -686,14 +699,15 @@ def main():
         else:
             save_sim_name = False
 
-        # fixed inital & goal state
-        init_pos = (2.5, 2.5)
-        goal_pos = (0, 0)
-
-        # # randomize initial & goal state
-        # init_pos = np.random.rand(2) * 3
-        # init_pos[1] += 2
-        # goal_pos = np.random.rand(2) - 0.5
+        if randomize:
+            # randomize initial & goal state
+            init_pos = np.random.rand(2) * 3
+            init_pos[1] += 2
+            goal_pos = np.random.rand(2) - 0.5
+        else:
+            # fixed inital & goal state
+            init_pos = (2.5, 2.5)
+            goal_pos = (0, 0)
 
         init_state = State(tuple(init_pos))
         goal_state = State(tuple(goal_pos))
@@ -724,7 +738,7 @@ def main():
         init_belief = Particles(init_belief)
                
         # creates POMDP model
-        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, epsilon, guide_policy)
+        light_dark_problem = LightDarkProblem(init_state, init_belief, goal_state, light, const, epsilon, policynet, valuenet)
         # light_dark_problem.agent.set_belief(Particles.from_histogram(init_belief,num_particles=1))
         light_dark_problem.agent.set_belief(init_belief)
 
@@ -776,8 +790,18 @@ def main():
                 save_sim_name_ = f'{save_sim_name}_{i}'
             else:
                 save_sim_name_ = False
-            best_action, time_taken, sims_count, sims_count_success, root_value, action_value, step_data = planner.plan(light_dark_problem.agent, i, logging, save_sim_name_, guide, rollout_guide)
             
+            if not(only_guide):
+                best_action, time_taken, sims_count, sims_count_success, root_value, action_value, step_data = planner.plan(light_dark_problem.agent, i, logging, save_sim_name_, randomize, guide_policy, rollout_guide, guide_value)
+            else:
+                best_action, time_taken = policynet.sample(light_dark_problem.agent.history, goal_state.position)
+                sims_count = 1
+                sims_count_success = 1
+                root_value = 0
+                action_value = 0
+                step_data = ()
+
+
             traj_data.append(step_data)
             log_time_each.append(time_taken)
             log_val_each_root.append(root_value)
@@ -797,7 +821,11 @@ def main():
             total_num_sims_success += sims_count_success
             total_plan_time += time_taken
 
-            check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+            if not(only_guide):
+                check_goal = planner.update(light_dark_problem.agent, light_dark_problem.env, best_action, next_state, real_observation)
+            else:
+                light_dark_problem.env.apply_transition(next_state)
+                check_goal = light_dark_problem.env.reward_model.is_goal_state(next_state)
             # |TODO| can move before update to avoid confusion state case and belief case?
             # By belief state
             # reward = light_dark_problem.env.reward_model.sample(light_dark_problem.agent.cur_belief, best_action, light_dark_problem.agent.cur_belief)

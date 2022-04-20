@@ -8,6 +8,10 @@ from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
 from dataclasses import dataclass, replace
 from simple_parsing import Serializable
 
+import pdb
+
+from wandb import set_trace
+
 
 class LightDarkDataset(Dataset):
     """
@@ -22,34 +26,37 @@ class LightDarkDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, index):
-        traj = self.dataset[index]
-        with open(traj, 'rb') as f:
+        d = self.dataset[index]
+        with open(d, 'rb') as f:
             try:
                 # print(self.dataset[index])
-                traj = pickle.load(f)
+                d = pickle.load(f)
             except pickle.UnpicklingError:
                 pass
         
         if self.transform:
-            data = self.transform(traj)
-        
+            d = self.transform(d)
+
+        if self.config.randomize:
+            traj = d[0]
+            goal_state = d[1]
+        else:
+            traj = d
+            
         # print('========================================')
         # print(traj)
         action = np.asarray(traj[:, 0])
         observation = traj[:, 1]
         next_state = traj[:, 2]
         reward = traj[:, 3]
-        # if self.config.randomize:
-        #     goal_state = traj[-2]
-        # total_reward = traj[-1]
 
         data = {'action': action.tolist(),
                 'observation': observation.tolist(),
                 'next_state': next_state.tolist(),
                 'reward': reward.tolist()}
         
-        # if self.config.randomize:
-        #     data['goal_state'] = goal_state
+        if self.config.randomize:
+            data['goal_state'] = np.asarray(goal_state)
 
         return data
 
@@ -102,7 +109,7 @@ class BatchMaker():
         self.device = config.device
 
     def __call__(self, data):
-        o, a, r, next_a, next_s, next_r, goal_s, total_r, timestep, mask = [], [], [], [], [], [], [], [], [], []
+        o, a, r, next_a, next_s, next_r, goal_s, accumulated_r, timestep, mask = [], [], [], [], [], [], [], [], [], []
         for traj in data:
             if len(traj['observation']) == 2:
                 i = 1
@@ -116,8 +123,13 @@ class BatchMaker():
             next_a.append(np.asarray(traj['action'])[i].reshape(1, -1, 2))
             next_r.append(np.asarray(traj['reward'])[i].reshape(1, -1, 1))
             next_s.append(np.asarray(traj['next_state'])[1:i+1].reshape(1, -1, 2))
-            # total_r.append(traj['total_reward'])
-            # goal_s.append(traj['goal_state'].reshape(1, -1, 2))
+            accumulated_r.append(np.sum(np.asarray(traj['reward'][i:])).reshape(1, -1))
+
+            # if np.sum(np.asarray(traj['reward'][i:])) < 0.0:
+            #     pdb.set_trace()
+
+            if self.config.randomize:
+                goal_s.append(traj['goal_state'].reshape(1, -1, 2))
             timestep.append(np.arange(0, i).reshape(1, -1))
             timestep[-1][timestep[-1] >= 31] = 31 - 1  # padding cutoff
 
@@ -130,8 +142,10 @@ class BatchMaker():
             r[-1] = np.concatenate([np.zeros((1, 31 - tlen, 1)), r[-1]], axis=1)
             next_s[-1] = np.concatenate([np.zeros((1, 31 - tlen, 2)), next_s[-1]], axis=1)
             timestep[-1] = np.concatenate([np.zeros((1, 31 - tlen)), timestep[-1]], axis=1)
-            mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
-            # mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
+            if self.config.randomize:
+                mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen + 1), True, dtype=bool)], axis=1))
+            else:
+                mask.append(np.concatenate([np.full((1, 31 - tlen), False, dtype=bool), np.full((1, tlen), True, dtype=bool)], axis=1))
 
         o = th.from_numpy(np.concatenate(o, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         a = th.from_numpy(np.concatenate(a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
@@ -139,8 +153,9 @@ class BatchMaker():
         next_a = th.from_numpy(np.concatenate(next_a, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_r = th.from_numpy(np.concatenate(next_r, axis=0)).to(dtype=th.float32, device=th.device(self.device))
         next_s = th.from_numpy(np.concatenate(next_s, axis=0)).to(dtype=th.float32, device=th.device(self.device))
-        # total_r = th.from_numpy(np.asarray(total_r).reshape(-1, 1)).to(dtype=th.float32, device=th.device(self.config.device))
-        # goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
+        accumulated_r = th.from_numpy(np.concatenate(accumulated_r, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
+        if self.config.randomize:
+            goal_s = th.from_numpy(np.concatenate(goal_s, axis=0)).to(dtype=th.float32, device=th.device(self.config.device))
         timestep = th.from_numpy(np.concatenate(timestep, axis=0)).to(dtype=th.long, device=th.device(self.device))
         mask = th.from_numpy(np.concatenate(mask, axis=0)).to(device=th.device(self.device))
         
@@ -150,10 +165,12 @@ class BatchMaker():
             'next_action': next_a,
             'next_reward': next_r,
             'next_state': next_s,
-            # 'goal_state': goal_s,
-            # 'total_reward': total_r,
+            'accumulated_reward': accumulated_r,
             'timestep': timestep,
             'mask': mask}
+        
+        if self.config.randomize:
+            out['goal_state'] = goal_s
 
         return out
 
@@ -504,14 +521,16 @@ if __name__ == '__main__':
     class Settings(Serializable):
         # Dataset
         path: str = 'Learning/dataset'
-        data_type: str = 'mcts' # 'mcts' or 'success'
-        train_file: str = 'mcts_1_test/train' # folder name - mcts / file name - success traj.
-        test_file: str = 'mcts_1_test/test'
+        data_type: str = 'success' # 'mcts' or 'success'
+        train_file: str = 'sim_success_exp_const_30_std0.5_randomize_1' # folder name - mcts / file name - success traj.
+        test_file: str = 'sim_success_exp_const_30_std0.5_randomize_1'
         batch_size: int = 2 # 100steps/epoch
         shuffle: bool = True # for using Sampler, it should be False
         use_sampler: bool = False
         max_len: int = 100
         seq_len: int = 31
+        randomize: bool = True
+
         # |TODO| modify to automatically change
         dim_observation: int = 2
         dim_action: int = 2
@@ -582,7 +601,8 @@ if __name__ == '__main__':
 
     config = Settings()
     dataset_path = os.path.join(os.getcwd(), 'Learning/dataset')
-    dataset_filename = 'mcts_1_test/train'
+    # dataset_filename = 'sim_success_exp_const_30_std0.5_randomize_1'
+    dataset_filename = 'test'
 
     # with open(os.path.join(dataset_path, dataset_filename), 'rb') as f:
     #     dataset = pickle.load(f)
@@ -594,6 +614,9 @@ if __name__ == '__main__':
     data_loader = get_loader(config, dataset)
     # data_loader = get_loader_multi_target(config, dataset)
 
-    sample = next(iter(data_loader))
+    target = []
+    for i in range(500):
+        sample = next(iter(data_loader))
+        target.append(sample['accumulated_reward'])
 
-    print(sample)
+    print(target)
