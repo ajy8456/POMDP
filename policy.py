@@ -115,7 +115,8 @@ class SettingPolicy(Serializable):
     # model_name: str = '3.21_CVAE_mcts_3_dim16'
     # model_name: str = '3.23_CVAE_dim16_randomize_2'
     # model_name: str = '3.29_CVAE_dim16_sim_60K'
-    model_name: str = '4.17_CVAE'
+    # model_name: str = '4.17_CVAE'
+    model_name: str = '4.25_CVAE_sim_success_2'
 
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps

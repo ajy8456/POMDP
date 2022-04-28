@@ -81,7 +81,8 @@ class SettingValue(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '4.17_ValueNet'
+    # model_name: str = '4.17_ValueNet'
+    model_name: str = '4.25_ValueNet_sim_success_2'
 
     print_freq: int = 1000 # per train_steps
     train_eval_freq: int = 1000 # per train_steps

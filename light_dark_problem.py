@@ -613,10 +613,10 @@ class LightDarkViz:
 def main():
     plotting = None
     save_log = False
-    save_data = True
+    save_data = False
     save_sim_data = False
-    # save_sim_data = 'sim_success_randomize_1_5'
-    name_dataset = 'mcts_1_1'
+    # save_sim_data = 'sim_success_randomize_2_5'
+    # name_dataset = 'mcts_1_32'
     # name_dataset = None
     exp = False
 
@@ -625,6 +625,7 @@ def main():
     guide_policy = True
     guide_value = True
     guide_value_const = [0.0, 1.0] # [rollout, network]
+    # guide_value_const = [1.0, 0.0] # [rollout, network]
     rollout_guide = False
     only_guide = False
 
@@ -652,7 +653,7 @@ def main():
             os.mkdir(save_dir)
             
     if save_sim_data:
-        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_randomize_1')
+        save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'sim_success_randomize_2')
         # save_dir_sim = os.path.join(os.getcwd(),'Learning/dataset', 'test')
         if not os.path.exists(save_dir_sim):
             os.mkdir(save_dir_sim)

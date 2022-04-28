@@ -28,10 +28,10 @@ class Settings(Serializable):
     # data_type_2: str = 'mcts' # 'mcts' or 'success'
     randomize: bool = True
     filter: float = 51
-    train_file: str = 'sim_success_randomize_1' # folder name
+    train_file: str = 'sim_success_randomize_2' # folder name
     # train_file_1: str = 'sim_success_exp_const_30_std0.5'
     # train_file_2: str = 'mcts_1_exp_const_30_std0.5'
-    test_file: str = 'sim_success_randomize_1'
+    test_file: str = 'sim_success_randomize_2'
     batch_size: int = 4096 # 100steps/epoch
     shuffle: bool = True # for using Sampler, it should be False
     use_sampler: bool = False
@@ -44,7 +44,7 @@ class Settings(Serializable):
     dim_reward: int = 1
 
     # Architecture
-    model: str = 'CVAE' # GPT or RNN or LSTM or CVAE or ValueNet or PolicyValueNet
+    model: str = 'ValueNet' # GPT or RNN or LSTM or CVAE or ValueNet or PolicyValueNet
     optimizer: str = 'AdamW' # AdamW or AdamWR
 
     dim_embed: int = 16
@@ -98,11 +98,10 @@ class Settings(Serializable):
 
     # Training
     device: str = 'cuda' if th.cuda.is_available() else 'cpu'
-    # resume: str = None # checkpoint file name for resuming
-    resume: str = 'ckpt_epoch_280.pth' # checkpoint file name for resuming
+    resume: str = None # checkpoint file name for resuming
     pre_trained: str = None
-    # pre_trained: str = '3.15_CVAE_dim16_randomize_1/best.pth'
-    # pre_trained: str = '3.15_CVAE_mcts_2_dim16/best.pth'
+    # pre_trained: str = '4.17_CVAE/best.pth'
+    pre_trained: str = '4.17_ValueNet/best.pth'
     # pre_trained: str = '3.11_CVAE_mcts_1_dim16/best.pth'
     # pre_trained: str = '3.5_CVAE_sim_mcts_2_dim16/best.pth'
     # pre_trained: str = '2.27_CVAE_sim_mcts_1_dim16/best.pth'
@@ -128,7 +127,8 @@ class Settings(Serializable):
 
     # Logging
     exp_dir: str = 'Learning/exp'
-    model_name: str = '4.17_CVAE'
+    model_name: str = 'test'
+    # model_name: str = '4.25_ValueNet_sim_success_2'
     # model_name: str = '4.17_ValueNet'
 
     print_freq: int = 100 # per train_steps
@@ -166,18 +166,18 @@ def main():
 
         dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
         # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
-        train_dataset = dataset[:1500000]
-        test_dataset = dataset[-200000:]
-        # train_dataset = dataset[:60000]
-        # test_dataset = dataset[-10000:]
+        # train_dataset = dataset[:1500000]
+        # test_dataset = dataset[-200000:]
+        train_dataset = dataset[:-20000]
+        test_dataset = dataset[-20000:]
 
         print('#trajectories of train_dataset:', len(train_dataset))
         print('#trajectories of test_dataset:', len(test_dataset))
     
     elif config.data_type == 'mcts':
         dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
-        train_dataset = dataset[:-30000]
-        test_dataset = dataset[-30000:]
+        train_dataset = dataset[:-20000]
+        test_dataset = dataset[-20000:]
 
         # train_dataset = glob.glob(f'{dataset_path}/{train_filename}/*.pickle')
         # test_dataset = glob.glob(f'{dataset_path}/{test_filename}/*.pickle')
