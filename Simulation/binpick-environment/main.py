@@ -7,7 +7,8 @@ import pybullet as p
 
 from envs.binpick_env import BinPickEnv
 from envs.frankapanda import FrankaPanda
-from utils.process_pointcloud import generatePointCloud, removeHiddenPoints, pcBase2World, pcWorld2Camera, visualizePointCloud
+from utils.process_pointcloud import generatePointCloud, removeHiddenPoints, transformPointCloud, visualizePointCloud
+from utils.process_geometry import matrixBase2World, matrixWorld2Camera
 
 
 if __name__=="__main__":
@@ -23,61 +24,44 @@ if __name__=="__main__":
     p.setGravity(0, 0, -9.8)
     p.resetDebugVisualizerCamera(cameraDistance=0.25, cameraYaw=240, cameraPitch=-40, cameraTargetPosition=[-0.25,0.20,0.8])
 
-    # GPU acceleration (linux only)
-    '''
+    # GPU acceleration (linux only) Reference: https://colab.research.google.com/drive/1u6j7JOqM05vUUjpVp5VNk0pd8q-vqGlx#scrollTo=fJXFN4U7NIRC
     import pkgutil
     egl = pkgutil.get_loader('eglRenderer')
     if (egl):
         eglPluginId = p.loadPlugin(egl.get_filename(), "_eglRendererPlugin")
-    '''
 
     # Init environments and agents
     binpick_env = BinPickEnv(customURDFPath)
     panda = FrankaPanda()
 
-
-
-    stepCount = 0
+    # Simulation loop
+    step_count = 0
     while True:
         # For smooth rendering
         p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING)
     
-        # Render camera
+        # Render depth camera
         binpick_env.render()
 
-        # Generate pointclouds from the URDFs
-        # TODO: Optimize camera parameters
-        obj0_pos, obj0_orn = p.getBasePositionAndOrientation(binpick_env.object0Uid)
-        obj0_pos = np.array(obj0_pos)
-        obj0_R = np.reshape(p.getMatrixFromQuaternion(obj0_orn), (3, 3))
-        obj0_pcd = generatePointCloud(binpick_env.object0Uid)
-        pcBase2World(obj0_pcd, obj0_pos, obj0_R)
+        if step_count >= 50:
+            # Generate pointclouds from the URDFs
+            pcd = generatePointCloud(binpick_env.object0Uid)
 
-        # TODO: Fix camera coordinate transfrom
-        #camera_target_pos = np.array(binpick_env.camera_target_pos)
-        #camera_euler_orn = np.array(binpick_env.camera_euler_orn)
-        #camera_R = np.reshape(p.getMatrixFromQuaternion(p.getQuaternionFromEuler(camera_euler_orn)), (3, 3))
-        #pcWorld2Camera(obj0_pcd, camera_target_pos, camera_R)
-        visualizePointCloud(obj0_pcd)
+            # Get transformation matrices
+            T_world = matrixBase2World(binpick_env.object0Uid)
+            T_camera = matrixWorld2Camera(binpick_env.view_matrix)
+            T_base2camera = np.matmul(T_camera, T_world)
+            
+            # Transfrom the point cloud directly to the camera frame from the base frame.
+            transformPointCloud(pcd, T_base2camera)
+            visualizePointCloud(pcd)
 
-        obj1_pos, obj1_orn = p.getBasePositionAndOrientation(binpick_env.object1Uid)    
-        obj1_R = np.reshape(p.getMatrixFromQuaternion(obj1_orn), (3, 3))
-        obj1_pcd = generatePointCloud(binpick_env.object1Uid)
-        pcBase2World(obj1_pcd, obj1_pos, obj1_R)
-        visualizePointCloud(obj1_pcd)
+            # TODO: hidden point removal.
 
-        # TODO: hidden point removal.
-
-
-        # Reset
-        if False:
-            binpick_env.reset()
-            panda.reset()
-            stepCount=0
 
         # Update pybullet
         p.stepSimulation()
-        stepCount+=1
+        step_count+=1
 
 
     p.disconnect()
