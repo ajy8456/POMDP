@@ -1,12 +1,14 @@
 import os
 import math
 import numpy as np
+import pickle
 
 import pybullet as p
 
 from envs.binpick_env import BinPickEnv
 from envs.frankapanda import FrankaPanda
 
+NUM_DATA = 5000
 
 if __name__=="__main__":
 
@@ -31,6 +33,8 @@ if __name__=="__main__":
     binpick_env = BinPickEnv(customURDFPath)
     panda = FrankaPanda()
 
+    # pcd to save
+    pcd_save = []
 
     # Simulation loop
     while True:
@@ -39,15 +43,35 @@ if __name__=="__main__":
     
         # Render depth camera
         binpick_env.render()
+        # Update environment step
+        binpick_env.step()
 
+        # Once pointcloud is generated, (None when the environment is not stabilized yet)
+        pcd_gt = binpick_env.pcd_groundtruth
+        if pcd_gt != None:
+            # Collect data if pcd_gt is valid
+            if len(pcd_gt) != 0:
+                pcd_save.append(pcd_gt)
+                print("Data added: " + str(len(pcd_save)))
+            else:
+                print("Invalid environment")
 
+            # Reset environment.
+            binpick_env.reset()
 
-
-
-
-
+            # Finish
+            if len(pcd_save) >= NUM_DATA: 
+                break
 
         # Update pybullet
         p.stepSimulation()
 
+    # Disconnet pybullet
     p.disconnect()
+
+    # Save to pickle
+    print("Data summary: " + str(len(pcd_save)))
+    print("Saving data...")
+    with open("./dataset/pcd_groundtruth_"+str(NUM_DATA)+".bin", "wb") as file:
+        pickle.dump(pcd_save, file)
+        print("Success!")
