@@ -42,7 +42,7 @@ def generatePointCloud(uId) -> o3d.geometry.PointCloud:
         mesh = o3d.io.read_triangle_mesh(i[4].decode('UTF-8'))
 
         # If mesh has more than 8 triangles
-        if np.asarray(mesh.triangles).shape[0] >= 8:
+        if np.asarray(mesh.triangles).shape[0] >= 1:
 
             # 4-a. Calculate local volume (part volume)
             aabb = mesh.get_axis_aligned_bounding_box()
@@ -78,22 +78,12 @@ def removeHiddenPoints(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
     pcd = pcd.select_by_index(pt_map)
     
     return pcd
-
-
-def pcBase2World(pcd, g_pos, g_R):
-    # Apply transform
-    pcd.translate(g_pos, relative=False)
-    pcd.rotate(g_R, center=g_pos)
     
 
-def pcWorld2Camera(pcd, c_pos, c_R):
-    # Get inverse of camera state
-    T = -c_pos
-    R = np.linalg.pinv(c_R) 
-
+def transformPointCloud(pcd, T):
     # Apply transform
-    pcd.translate(T, relative=True)
-    pcd.rotate(R)
+    pcd.transform(T)
+
 
 def instanceSegmentPointCloud(pcd: o3d.geometry.PointCloud, instanceId) -> dict:
     '''
@@ -108,6 +98,7 @@ def instanceSegmentPointCloud(pcd: o3d.geometry.PointCloud, instanceId) -> dict:
         pc_seg_dict[key] = value
 
     return pc_seg_dict
+
 
 def visualizePointCloud(pcd):
     
@@ -131,7 +122,7 @@ if __name__=="__main__":
     pybullet_data.getDataPath()
 
     # Load URDF (articulated -> more than 1 joint)
-    objId = p.loadURDF(os.path.join(ycb_objects.getDataPath(), 'YcbCrackerBox', "model.urdf"), 
+    objId = p.loadURDF(os.path.join(ycb_objects.getDataPath(), 'YcbMustardBottle', "model.urdf"), 
                                 basePosition=[0, 0, 0], 
                                 baseOrientation=[0, 0, 0, 1],
                                 useFixedBase=1)    
