@@ -8,7 +8,7 @@ import pybullet as p
 from envs.binpick_env import BinPickEnv
 from envs.frankapanda import FrankaPanda
 
-NUM_DATA = 5000
+NUM_DATA = 5
 
 if __name__=="__main__":
 
@@ -33,8 +33,8 @@ if __name__=="__main__":
     binpick_env = BinPickEnv(customURDFPath)
     panda = FrankaPanda()
 
-    # pcd to save
-    pcd_save = []
+    # PCD count
+    pcd_count = 0
 
     # Simulation loop
     while True:
@@ -51,8 +51,12 @@ if __name__=="__main__":
         if pcd_gt != None:
             # Collect data if pcd_gt is valid
             if len(pcd_gt) != 0:
-                pcd_save.append(pcd_gt)
-                print("Data added: " + str(len(pcd_save)))
+                # Save as pickle
+                print("Saving data...")
+                with open("./dataset/pcd_groundtruth_"+str(pcd_count)+".bin", "wb") as file:
+                    pickle.dump(pcd_gt, file)
+                print("Data saved!" + str(pcd_count))
+                pcd_count += 1
             else:
                 print("Invalid environment")
 
@@ -60,7 +64,7 @@ if __name__=="__main__":
             binpick_env.reset()
 
             # Finish
-            if len(pcd_save) >= NUM_DATA: 
+            if pcd_count >= NUM_DATA: 
                 break
 
         # Update pybullet
@@ -69,9 +73,3 @@ if __name__=="__main__":
     # Disconnet pybullet
     p.disconnect()
 
-    # Save to pickle
-    print("Data summary: " + str(len(pcd_save)))
-    print("Saving data...")
-    with open("./dataset/pcd_groundtruth_"+str(NUM_DATA)+".bin", "wb") as file:
-        pickle.dump(pcd_save, file)
-        print("Success!")
