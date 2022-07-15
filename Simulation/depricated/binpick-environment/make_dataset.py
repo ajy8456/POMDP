@@ -1,15 +1,14 @@
 import os
 import math
 import numpy as np
+import pickle
 
 import pybullet as p
 
-
 from envs.binpick_env import BinPickEnv
 from envs.frankapanda import FrankaPanda
-from utils.process_pointcloud import generatePointCloud, removeHiddenPoints, transformPointCloud, visualizePointCloud
-from utils.process_geometry import matrixBase2World, matrixWorld2Camera
 
+NUM_DATA = 5
 
 if __name__=="__main__":
 
@@ -34,34 +33,43 @@ if __name__=="__main__":
     binpick_env = BinPickEnv(customURDFPath)
     panda = FrankaPanda()
 
+    # PCD count
+    pcd_count = 0
+
     # Simulation loop
-    step_count = 0
     while True:
         # For smooth rendering
         p.configureDebugVisualizer(p.COV_ENABLE_SINGLE_STEP_RENDERING)
     
         # Render depth camera
         binpick_env.render()
+        # Update environment step
+        binpick_env.step()
 
-        if step_count >= 50:
-            # Generate pointclouds from the URDFs
-            pcd = generatePointCloud(binpick_env.object0Uid)
+        # Once pointcloud is generated, (None when the environment is not stabilized yet)
+        pcd_gt = binpick_env.pcd_groundtruth
+        if pcd_gt != None:
+            # Collect data if pcd_gt is valid
+            if len(pcd_gt) != 0:
+                # Save as pickle
+                print("Saving data...")
+                with open("./dataset/pcd_groundtruth_"+str(pcd_count)+".bin", "wb") as file:
+                    pickle.dump(pcd_gt, file)
+                print("Data saved!" + str(pcd_count))
+                pcd_count += 1
+            else:
+                print("Invalid environment")
 
-            # Get transformation matrices
-            T_world = matrixBase2World(binpick_env.object0Uid)
-            T_camera = matrixWorld2Camera(binpick_env.view_matrix)
-            T_base2camera = np.matmul(T_camera, T_world)
-            
-            # Transfrom the point cloud directly to the camera frame from the base frame.
-            transformPointCloud(pcd, T_base2camera)
-            visualizePointCloud(pcd)
+            # Reset environment.
+            binpick_env.reset()
 
-            # TODO: hidden point removal.
-
+            # Finish
+            if pcd_count >= NUM_DATA: 
+                break
 
         # Update pybullet
         p.stepSimulation()
-        step_count+=1
 
-
+    # Disconnet pybullet
     p.disconnect()
+

@@ -14,6 +14,9 @@ def generatePointCloud(uId) -> o3d.geometry.PointCloud:
     The poincloud has its origin at the base of 
     '''
 
+    MAX_NUM_POINTS = 2500
+    MIN_NUM_POINTS = 1000
+
     # 1. Collect all shape data of parts along links in URDF
     #     Link index description
     #         -1: base
@@ -41,7 +44,7 @@ def generatePointCloud(uId) -> o3d.geometry.PointCloud:
         # Read mesh file of URDF.
         mesh = o3d.io.read_triangle_mesh(i[4].decode('UTF-8'))
 
-        # If mesh has more than 8 triangles
+        # If mesh has triangles
         if np.asarray(mesh.triangles).shape[0] >= 1:
 
             # 4-a. Calculate local volume (part volume)
@@ -49,34 +52,18 @@ def generatePointCloud(uId) -> o3d.geometry.PointCloud:
             LocalVolume = np.prod(aabb.max_bound - aabb.min_bound)
 
             # 4-b. Get point cloud from the part given number of points
-            PointsNum = max(int(5000 * (LocalVolume / TotalVolume)), 1000)
+            PointsNum = max(int(MAX_NUM_POINTS * (LocalVolume / TotalVolume)), MIN_NUM_POINTS)
             pcd_part = mesh.sample_points_poisson_disk(number_of_points=PointsNum, init_factor=2)
             # pcd = pcd.voxel_down_sample(voxel_size=0.025)
 
             # 4-c. Convert pointcloud to numpy array and concatenates all parts
             pc_new = np.asarray(pcd_part.points)
-            pc_xyz = np.append(pc_xyz, pc_new, axis=0)
+            pc_xyz = np.concatenate((pc_xyz, pc_new), axis=0)
 
     # Convert numpy pointcloud back to o3d type
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(pc_xyz)
 
-    return pcd
-
-
-def removeHiddenPoints(pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
-    '''
-    Remove Hidden Points from Open3D pointcloud
-    '''
-
-    # TODO: choose exact parameters for removal.
-    diameter = np.linalg.norm(
-    np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound()))
-    camera = [0, 0, diameter]
-    radius = diameter * 100
-    _, pt_map = pcd.hidden_point_removal(camera, radius)
-    pcd = pcd.select_by_index(pt_map)
-    
     return pcd
     
 
@@ -85,41 +72,86 @@ def transformPointCloud(pcd, T):
     pcd.transform(T)
 
 
-def instanceSegmentPointCloud(pcd: o3d.geometry.PointCloud, instanceId) -> dict:
+def mergePointCloud(pcd_list):
     '''
-    Add segment id to Open3D pointcloud. Return pointcloud converted to dictionary format.
+    Merge multiple point clouds in the list
+    Reference: https://sungchenhsi.medium.com/adding-pointcloud-to-pointcloud-9bf035707273
     '''
-    # Convert pointcloud into dictionary
-    pc_seg_dict = dict()
-    for point in pcd.points:
-        # Type: { (x, y, z): instanceId, ... }
-        key = tuple(point)
-        value = instanceId
-        pc_seg_dict[key] = value
+    merged_pcd_numpy = np.empty((0, 3), dtype=float)
+    for _pcd in pcd_list:
+        _pcd_numpy = np.asarray(_pcd.points)                 # Use np.asarray to avoid meaningless copy
+        merged_pcd_numpy = np.concatenate((merged_pcd_numpy, _pcd_numpy), axis=0)
 
-    return pc_seg_dict
+    merged_pcd = o3d.geometry.PointCloud()
+    merged_pcd.points = o3d.utility.Vector3dVector(merged_pcd_numpy)
+
+    return merged_pcd
+
+
+
+def removeHiddenPoints(pcd: o3d.geometry.PointCloud, camera: np.array):
+    '''
+    Remove Hidden Points from Open3D pointcloud
+    Reference: http://www.open3d.org/docs/latest/tutorial/Basic/pointcloud.html
+
+    Params:
+    - pcd: Point cloud to process
+    - camera: The location of the camera. Orientation is not considered.
+    '''
+    diameter = np.linalg.norm(
+    np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound()))
+
+    radius = diameter * 100
+    _, pt_map = pcd.hidden_point_removal(camera, radius)
+    pcd = pcd.select_by_index(pt_map)
+    
+    return pcd, pt_map
+
+
+def pointCloud2Dictionary(pcd, pt_map):
+    pc_dict = {
+        (_p[0], _p[1], _p[2]) : (1 if i in pt_map else 0)
+        for (i, _p) in enumerate(np.asarray(pcd.points))    # Use np.asarray to avoid meaningless copy
+    }
+
+    return pc_dict
 
 
 def visualizePointCloud(pcd):
+    '''
+    Visualize open3d type or dictionary type point cloud
+    '''
     
-    # o3d.visualization.draw_geometries([pcd], width=480, height=360)
     fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    ax.scatter([p[0] for p in pcd.points], [p[1] for p in pcd.points], [p[2] for p in pcd.points], s=0.5)
+    ax = fig.add_subplot(projection='3d')    
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     ax.set_xlim([-0.5, 0.5])
     ax.set_ylim([-0.5, 0.5])
     ax.set_zlim([-0.5, 0.5])
-    plt.show()
 
+    # Plot dictionary type point cloud
+    if isinstance(pcd, dict):
+        pos = [ _p for _p, _v in pcd.items() if _v == 1]
+        neg = [ _p for _p, _v in pcd.items() if _v == 0]
+        ax.scatter([_p[0] for _p in pos], [_p[1] for _p in pos], [_p[2] for _p in pos], s=0.2)
+        ax.scatter([_p[0] for _p in neg], [_p[1] for _p in neg], [_p[2] for _p in neg], s=0.2, c="r")
+    # Plot open3d type point cloud
+    elif isinstance(pcd, o3d.geometry.PointCloud):
+        # o3d.visualization.draw_geometries([pcd], width=480, height=360)
+        ax.scatter([p[0] for p in pcd.points], [p[1] for p in pcd.points], [p[2] for p in pcd.points], s=0.2)  
+    else:
+        print("Unidenified type to visualize")
+
+    plt.show()
 
 
 if __name__=="__main__":
     p.connect(p.GUI)
 
     pybullet_data.getDataPath()
+    print(ycb_objects.getDataPath())
 
     # Load URDF (articulated -> more than 1 joint)
     objId = p.loadURDF(os.path.join(ycb_objects.getDataPath(), 'YcbMustardBottle', "model.urdf"), 

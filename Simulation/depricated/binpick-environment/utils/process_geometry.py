@@ -35,3 +35,25 @@ def matrixWorld2Camera(view_matrix):
     T_camera = np.matmul(coord_swap_matrix, view_matrix)
 
     return T_camera
+
+def checkCollision(obj_list: list, threshold: int=-5e-4) -> bool:
+    '''
+    Check collision for each pair in the obj_list.
+
+    Params:
+    - obj_list: List of uids to compare with each other.
+    - threshold: Threshold of collision. Negative when contact.
+
+    Return:
+    - boolean
+    '''
+    for i in range(len(obj_list)):
+        for j in range(i, len(obj_list)):
+            if i != j:
+                contact_points = p.getContactPoints(obj_list[i], obj_list[j])
+                contact_dists = [field[8] for field in contact_points]          # field 8: contact distance... negative for penetration
+                if len(contact_dists) > 0 and min(contact_dists) <= -1e-3:       # collision when (dist <= -0.001)
+                    return True
+    else:
+        return False
+    

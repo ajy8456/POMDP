@@ -17,5 +17,5 @@ python3 -m main
 
 Pointcloud test
 ```Python
-python3 -m ./utils/process_pointcloud
+python3 -m utils.process_pointcloud
 ```
